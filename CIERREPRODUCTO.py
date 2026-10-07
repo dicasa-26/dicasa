@@ -2,7 +2,7 @@
 # Dashboard profesional de Cierre de Productos
 #
 # Instalar dependencias:
-# pip install streamlit pandas openpyxl plotly
+# pip install streamlit pandas openpyxl plotly streamlit-plotly-events
 #
 # Ejecutar:
 # streamlit run CIERREPRODUCTO.py
@@ -21,6 +21,11 @@ from typing import Dict, List, Optional, Tuple
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+
+try:
+    from streamlit_plotly_events import plotly_events
+except ImportError:
+    plotly_events = None
 
 
 # ============================================================
@@ -317,10 +322,13 @@ st.markdown(
 
     .exec-kpi-note {
         margin-top:auto;
-        border-top:1px solid #283C53 !important;
-        padding-top:6px !important;
-        color:#71859A !important;
-        font-size:.58rem !important;
+        border-top:1px solid rgba(116, 170, 224, .45) !important;
+        padding-top:8px !important;
+        color:#EAF4FF !important;
+        font-size:.92rem !important;
+        font-weight:780 !important;
+        line-height:1.20 !important;
+        text-shadow:0 0 1px rgba(255,255,255,.08);
     }
 
     .leader-name {
@@ -335,8 +343,8 @@ st.markdown(
         -webkit-box-orient:vertical;
     }
 
-    .leader-code { color:#72869B !important; font-size:.58rem !important; }
-    .leader-value { color:#F8FAFC !important; font-size:.84rem !important; font-weight:820 !important; }
+    .leader-code { color:#F7FBFF !important; font-size:.92rem !important; font-weight:780 !important; line-height:1.20 !important; text-shadow:0 0 1px rgba(255,255,255,.08); }
+    .leader-value { color:#FFFFFF !important; font-size:1.18rem !important; font-weight:860 !important; line-height:1.18 !important; }
 
     div[data-baseweb="tab-list"] {
         gap:6px !important;
@@ -2002,6 +2010,41 @@ def clean_dataframe(
 
 
     # --------------------------------------------------------
+    # EMPAQ PARA ANÁLISIS
+    # --------------------------------------------------------
+    # Regla global del dashboard:
+    # cualquier fila cuya DESCRIPCION comience con "AJUSTES"
+    # no participa al determinar unidades / empaques.
+    # La columna EMPAQ original se conserva intacta para
+    # visualización de datos originales.
+
+    if (
+        "EMPAQ" in result.columns
+        and "DESCRIPCION" in result.columns
+    ):
+        ajustes_mask = (
+            result["DESCRIPCION"]
+            .astype("string")
+            .fillna("")
+            .str.strip()
+            .str.upper()
+            .str.startswith("AJUSTES")
+        )
+
+        result["EMPAQ_ANALISIS"] = (
+            result["EMPAQ"]
+            .mask(
+                ajustes_mask,
+                pd.NA,
+            )
+        )
+    elif "EMPAQ" in result.columns:
+        result["EMPAQ_ANALISIS"] = (
+            result["EMPAQ"].copy()
+        )
+
+
+    # --------------------------------------------------------
     # Código
     # --------------------------------------------------------
 
@@ -3015,7 +3058,7 @@ def render_welcome_login_screen() -> None:
             justify-content: center;
             background: rgba(255,255,255,0.98);
             padding: 0.75rem 1rem;
-            border-radius: 20px;
+            border-radius: 14px;
             box-shadow:
                 0 16px 36px rgba(32,240,255,0.10),
                 0 0 0 1px rgba(255,255,255,0.04);
@@ -3052,7 +3095,7 @@ def render_welcome_login_screen() -> None:
         .welcome-caption {
             margin: 0.45rem 0 0 0;
             color: #DDE8F7;
-            font-size: 1.02rem;
+            font-size: .75rem;
             font-weight: 500;
         }
 
@@ -3068,7 +3111,7 @@ def render_welcome_login_screen() -> None:
 
         .welcome-field-label {
             color: #FFFFFF;
-            font-size: 1.05rem;
+            font-size: .80rem;
             font-weight: 700;
             margin: 0.2rem 0 0.4rem 0;
         }
@@ -3107,7 +3150,7 @@ def render_welcome_login_screen() -> None:
             border: 1px solid rgba(104, 149, 208, 0.28) !important;
             border-radius: 14px !important;
             font-weight: 800 !important;
-            font-size: 1.02rem !important;
+            font-size: .70rem !important;
             padding: 0.78rem 1rem !important;
             box-shadow: 0 10px 28px rgba(0,0,0,0.18) !important;
         }
@@ -3724,6 +3767,8 @@ with st.sidebar:
                 "se incluyen todos."
 
             ),
+
+            key="sidebar_product_filter",
 
         )
     )
@@ -4748,6 +4793,7 @@ with tab_familia:
             y="VENTAS",
             color="PERIODO",
             barmode="group",
+        barnorm="",
             title=(
                 "Comparativo por producto"
             ),
@@ -5044,12 +5090,24 @@ with tab_familia:
         )
 
         fig.update_traces(
-            textposition="inside",
-            textinfo="percent",
+            textposition="auto",
+            textinfo="none",
+            texttemplate=(
+                "<b>%{percent:.1%}</b><br>"
+                "$%{value:,.2f}"
+            ),
+            insidetextorientation="horizontal",
+            textfont=dict(
+                color="#FFFFFF",
+                size=10,
+                family=(
+                    "Inter, Segoe UI, Arial, sans-serif"
+                ),
+            ),
             hovertemplate=(
                 "<b>%{label}</b><br>"
                 "Ventas: $%{value:,.2f}<br>"
-                "%{percent}"
+                "Participación: %{percent:.2%}"
                 "<extra></extra>"
             ),
         )
@@ -5059,7 +5117,13 @@ with tab_familia:
         )
 
         fig.update_layout(
-            height=560,
+            height=585,
+            margin=dict(
+                l=35,
+                r=35,
+                t=72,
+                b=28,
+            ),
             legend=dict(
                 font=dict(
                     size=9,
@@ -5099,52 +5163,57 @@ with tab_familia:
             "📋 Resumen por familia"
         )
 
-    st.markdown(
-        '<div class="executive-table-title" '
-        'style="border-left-color:#00D8F0;">'
-        f'{table_title}'
-        '</div>',
-        unsafe_allow_html=True,
-    )
+    with st.expander(
+        f"{table_title}  ·  Mostrar / ocultar",
+        expanded=False,
+    ):
+        st.markdown(
+            '<div class="executive-table-title" '
+            'style="border-left-color:#00D8F0;'
+            'margin-top:2px;">'
+            f'{table_title}'
+            '</div>',
+            unsafe_allow_html=True,
+        )
 
-    render_executive_html_table(
-        summary_family_focus,
-        column_labels={
-            "FAMILIA":
-                "Familia",
-            "$VENTAS MES ACTUAL":
-                "Ventas Mes Actual ($)",
-            "$UTILIDAD MES ACTUAL":
-                "Utilidad Mes Actual ($)",
-            "INVENTARIO TOTAL":
-                "Inventario Total",
-            "#VENTAS PERDIDAS":
-                "Ventas Perdidas",
-            "MARGEN PROMEDIO %":
-                "Margen Promedio (%)",
-            "#VENTAS MES ANTERIOR":
-                "Ventas Mes Anterior",
-            "#VENTAS MES ACTUAL":
-                "Ventas Mes Actual",
-        },
-        formats={
-            "$VENTAS MES ACTUAL":
-                "money",
-            "$UTILIDAD MES ACTUAL":
-                "money",
-            "INVENTARIO TOTAL":
-                "number2",
-            "#VENTAS PERDIDAS":
-                "number2",
-            "MARGEN PROMEDIO %":
-                "percent",
-            "#VENTAS MES ANTERIOR":
-                "number2",
-            "#VENTAS MES ACTUAL":
-                "number2",
-        },
-        max_height=560,
-    )
+        render_executive_html_table(
+            summary_family_focus,
+            column_labels={
+                "FAMILIA":
+                    "Familia",
+                "$VENTAS MES ACTUAL":
+                    "Ventas Mes Actual ($)",
+                "$UTILIDAD MES ACTUAL":
+                    "Utilidad Mes Actual ($)",
+                "INVENTARIO TOTAL":
+                    "Inventario Total",
+                "#VENTAS PERDIDAS":
+                    "Ventas Perdidas",
+                "MARGEN PROMEDIO %":
+                    "Margen Promedio (%)",
+                "#VENTAS MES ANTERIOR":
+                    "Ventas Mes Anterior",
+                "#VENTAS MES ACTUAL":
+                    "Ventas Mes Actual",
+            },
+            formats={
+                "$VENTAS MES ACTUAL":
+                    "money",
+                "$UTILIDAD MES ACTUAL":
+                    "money",
+                "INVENTARIO TOTAL":
+                    "number2",
+                "#VENTAS PERDIDAS":
+                    "number2",
+                "MARGEN PROMEDIO %":
+                    "percent",
+                "#VENTAS MES ANTERIOR":
+                    "number2",
+                "#VENTAS MES ACTUAL":
+                    "number2",
+            },
+            max_height=560,
+        )
 
 
 # ============================================================
@@ -5248,7 +5317,7 @@ with tab_productos:
                 "<span style='font-size:18px;"
                 "font-weight:700;"
                 "letter-spacing:0.06em;"
-                "color:#D7AE58;'>"
+                "color:#D9B85C;'>"
                 "TOP 10 PRODUCTOS"
                 "</span>"
             ),
@@ -5290,7 +5359,6 @@ with tab_productos:
     # ========================================================
 
     st.markdown("---")
-    st.markdown("### 🧩 Ventas por producto dentro de una familia")
 
     families_for_chart = sorted(
         str(value)
@@ -5308,6 +5376,63 @@ with tab_productos:
             )
         else:
             default_index = 0
+
+        default_chart_family = (
+            families_for_chart[
+                default_index
+            ]
+        )
+
+        # Familia actualmente visible en el selector.
+        current_chart_family = st.session_state.get(
+            "family_product_chart",
+            default_chart_family,
+        )
+
+        if current_chart_family not in families_for_chart:
+            current_chart_family = default_chart_family
+            st.session_state[
+                "family_product_chart"
+            ] = default_chart_family
+
+        st.markdown(
+            "### 🧩 Ventas por producto dentro de una familia"
+        )
+
+        if "treemap_selection_reset_token" not in st.session_state:
+            st.session_state["treemap_selection_reset_token"] = 0
+
+        def clear_family_product_filter() -> None:
+            """
+            Limpia todos los filtros del análisis de productos:
+            familia del selector, producto elegido en el treemap
+            y filtro lateral por producto.
+            """
+            st.session_state[
+                "family_product_chart"
+            ] = default_chart_family
+
+            st.session_state[
+                "selected_product_from_treemap"
+            ] = None
+
+            st.session_state[
+                "selected_product_family"
+            ] = default_chart_family
+
+            st.session_state[
+                "sidebar_product_filter"
+            ] = []
+
+            st.session_state[
+                "treemap_selection_reset_token"
+            ] = (
+                st.session_state.get(
+                    "treemap_selection_reset_token",
+                    0,
+                )
+                + 1
+            )
 
         family_selector_col, family_clear_col = st.columns(
             [5.2, 0.9],
@@ -5328,22 +5453,548 @@ with tab_productos:
                 unsafe_allow_html=True,
             )
 
-            if st.button(
+            st.button(
                 "🧹 Borrar filtro",
                 key="clear_family_product_treemap",
                 use_container_width=True,
-            ):
-                st.session_state.pop(
-                    "family_product_chart",
-                    None,
-                )
-                st.rerun()
+                on_click=clear_family_product_filter,
+            )
 
-        family_products = (
+        # Leer nuevamente el estado actual para garantizar que
+        # todos los componentes de esta sección usen exactamente
+        # la familia que muestra el selectbox.
+        chart_family = st.session_state.get(
+            "family_product_chart",
+            default_chart_family,
+        )
+
+        # Si cambia la familia, una selección de producto
+        # perteneciente a la familia anterior deja de ser válida.
+        previous_product_family = st.session_state.get(
+            "selected_product_family"
+        )
+
+        if (
+            previous_product_family is not None
+            and str(previous_product_family) != str(chart_family)
+        ):
+            st.session_state[
+                "selected_product_from_treemap"
+            ] = None
+            st.session_state[
+                "selected_product_family"
+            ] = chart_family
+            st.session_state[
+                "treemap_selection_reset_token"
+            ] = (
+                st.session_state.get(
+                    "treemap_selection_reset_token",
+                    0,
+                )
+                + 1
+            )
+
+        # ====================================================
+        # KPI DINÁMICOS — ANÁLISIS DE PRODUCTOS POR FAMILIA
+        # ====================================================
+
+        selected_family_kpi_df = (
             filtered_df[
                 filtered_df["FAMILIA"]
                 .astype(str)
-                .eq(chart_family)
+                .eq(str(chart_family))
+            ]
+            .copy()
+        )
+
+        kpi_family_sales = safe_sum(
+            selected_family_kpi_df[
+                "$VENTAS MES ACTUAL"
+            ]
+        )
+
+        kpi_family_inventory = safe_sum(
+            selected_family_kpi_df[
+                "INVENTARIO TOTAL"
+            ]
+        )
+
+        family_pack_values = sorted(
+            {
+                str(value).strip()
+                for value in selected_family_kpi_df[
+                    "EMPAQ_ANALISIS"
+                ]
+                .dropna()
+                .tolist()
+                if str(value).strip()
+                and str(value).strip().lower()
+                not in {"nan", "<na>", "none"}
+            }
+        )
+
+        if len(family_pack_values) == 1:
+            kpi_family_pack = family_pack_values[0]
+        elif len(family_pack_values) > 1:
+            kpi_family_pack = "Varios empaques"
+        else:
+            kpi_family_pack = "Sin empaque"
+
+        kpi_product_summary = (
+            selected_family_kpi_df
+            .groupby(
+                [
+                    "#COD.",
+                    "DESCRIPCION",
+                ],
+                dropna=False,
+                as_index=False,
+            )
+            .agg(
+                {
+                    "$VENTAS MES ACTUAL": "sum",
+                    "INVENTARIO TOTAL": "sum",
+                    "EMPAQ_ANALISIS": (
+                        lambda values:
+                        next(
+                            (
+                                str(value).strip()
+                                for value in values
+                                if pd.notna(value)
+                                and str(value).strip()
+                            ),
+                            "",
+                        )
+                    ),
+                }
+            )
+            .sort_values(
+                "$VENTAS MES ACTUAL",
+                ascending=False,
+            )
+            .reset_index(drop=True)
+        )
+
+        if not kpi_product_summary.empty:
+            kpi_top_product_code = str(
+                kpi_product_summary.iloc[0][
+                    "#COD."
+                ]
+            )
+
+            kpi_top_product_name = str(
+                kpi_product_summary.iloc[0][
+                    "DESCRIPCION"
+                ]
+            )
+
+            kpi_top_product_sales = float(
+                kpi_product_summary.iloc[0][
+                    "$VENTAS MES ACTUAL"
+                ]
+            )
+
+            kpi_top_product_inventory = float(
+                kpi_product_summary.iloc[0][
+                    "INVENTARIO TOTAL"
+                ]
+            )
+
+            kpi_top_product_pack = str(
+                kpi_product_summary.iloc[0][
+                    "EMPAQ_ANALISIS"
+                ]
+            ).strip()
+
+            if (
+                not kpi_top_product_pack
+                or kpi_top_product_pack.lower()
+                in {"nan", "<na>", "none"}
+            ):
+                kpi_top_product_pack = "Sin empaque"
+        else:
+            kpi_top_product_code = ""
+            kpi_top_product_name = "Sin datos"
+            kpi_top_product_sales = 0.0
+            kpi_top_product_inventory = 0.0
+            kpi_top_product_pack = "Sin empaque"
+
+        st.markdown(
+            "<div style='height:10px'></div>",
+            unsafe_allow_html=True,
+        )
+
+        # ====================================================
+        # KPI EJECUTIVOS — ANÁLISIS DE PRODUCTOS
+        # Diseño exclusivo para evitar conflictos con CSS global
+        # ====================================================
+
+        st.markdown(
+            """
+            <style>
+            /* ==================================================
+               KPI ANÁLISIS DE PRODUCTOS — DISEÑO EJECUTIVO
+               ================================================== */
+
+            .pa-kpi-card {
+                position: relative;
+                min-height: 142px;
+                height: 142px;
+                border-radius: 14px;
+                padding: 7px 9px 6px 9px;
+                background:
+                    linear-gradient(
+                        145deg,
+                        rgba(18, 39, 64, .98) 0%,
+                        rgba(9, 25, 45, .99) 100%
+                    );
+                border: 1px solid rgba(100, 135, 170, .32);
+                box-shadow:
+                    0 10px 26px rgba(0, 0, 0, .20),
+                    inset 0 1px 0 rgba(255, 255, 255, .025);
+                overflow: hidden;
+                display: flex;
+                flex-direction: column;
+            }
+
+            .pa-kpi-card::before {
+                content: "";
+                position: absolute;
+                top: 0;
+                left: 16px;
+                right: 16px;
+                height: 3px;
+                border-radius: 0 0 6px 6px;
+                background: var(--pa-accent);
+                box-shadow: 0 0 14px var(--pa-glow);
+            }
+
+            .pa-kpi-card.sales {
+                --pa-accent: #26C9F5;
+                --pa-glow: rgba(38, 201, 245, .55);
+                --pa-value: #7DE0FF;
+            }
+
+            .pa-kpi-card.inventory {
+                --pa-accent: #A47AE8;
+                --pa-glow: rgba(164, 122, 232, .48);
+                --pa-value: #B88AF7;
+            }
+
+            .pa-kpi-card.leader {
+                --pa-accent: #E2B84E;
+                --pa-glow: rgba(226, 184, 78, .48);
+                --pa-value: #F2CF69;
+            }
+
+            .pa-kpi-head {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                min-height: 27px;
+            }
+
+            .pa-kpi-icon {
+                width: 26px;
+                height: 26px;
+                min-width: 26px;
+                border-radius: 10px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: .80rem;
+                background:
+                    linear-gradient(
+                        145deg,
+                        rgba(15, 42, 69, .95),
+                        rgba(7, 24, 44, .98)
+                    );
+                border: 1px solid var(--pa-accent);
+                box-shadow:
+                    0 0 14px var(--pa-glow),
+                    inset 0 0 14px rgba(255, 255, 255, .025);
+            }
+
+            .pa-kpi-title {
+                color: #48C9F5 !important;
+                font-size: .70rem !important;
+                line-height: 1.14 !important;
+                font-weight: 900 !important;
+                letter-spacing: .028em !important;
+                text-transform: uppercase !important;
+                text-align: left !important;
+                margin: 0 !important;
+                white-space: normal !important;
+                overflow: visible !important;
+            }
+
+            .pa-kpi-divider {
+                height: 1px;
+                margin: 4px 0 4px 0;
+                background:
+                    linear-gradient(
+                        90deg,
+                        rgba(85, 139, 190, .62),
+                        rgba(85, 139, 190, .10)
+                    );
+            }
+
+            .pa-kpi-main {
+                flex: 1;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                min-height: 34px;
+                padding: 0 2px 1px 2px;
+            }
+
+            .pa-kpi-value {
+                color: var(--pa-value) !important;
+                font-size: clamp(1.28rem, 1.42vw, 1.72rem) !important;
+                line-height: .98 !important;
+                font-weight: 950 !important;
+                letter-spacing: -.035em !important;
+                text-align: center !important;
+                white-space: nowrap !important;
+                text-shadow: 0 0 12px var(--pa-glow);
+                margin: 0 !important;
+            }
+
+            .pa-kpi-footer {
+                min-height: 27px;
+                border-radius: 10px;
+                border: 1px solid rgba(91, 137, 184, .30);
+                background: rgba(12, 35, 59, .78);
+                padding: 4px 7px;
+                display: flex;
+                align-items: center;
+                gap: 9px;
+                color: #CFE2F5 !important;
+                font-size: .66rem !important;
+                line-height: 1.18 !important;
+                font-weight: 780 !important;
+                text-align: left !important;
+            }
+
+            .pa-kpi-footer-icon {
+                color: #79C9FF;
+                font-size: .75rem;
+                line-height: 1;
+            }
+
+            /* Producto líder */
+            .pa-leader-main {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: flex-start;
+                min-height: 46px;
+                padding: 0 2px 2px 2px;
+            }
+
+            .pa-leader-name {
+                width: 100%;
+                color: #E8EDF5 !important;
+                font-size: .70rem !important;
+                line-height: 1.22 !important;
+                font-weight: 880 !important;
+                margin-bottom: 5px !important;
+                white-space: normal !important;
+                overflow-wrap: anywhere !important;
+                word-break: normal !important;
+                display: block !important;
+            }
+
+            .pa-leader-code {
+                color: #AFC6DC !important;
+                font-size: .64rem !important;
+                line-height: 1.18 !important;
+                font-weight: 740 !important;
+                margin-bottom: 5px !important;
+            }
+
+            .pa-leader-value {
+                color: #F2CF69 !important;
+                font-size: clamp(1.15rem, 1.28vw, 1.50rem) !important;
+                line-height: .98 !important;
+                font-weight: 950 !important;
+                letter-spacing: -.025em !important;
+                text-shadow: 0 0 11px rgba(226, 184, 78, .36);
+                margin: 0 !important;
+            }
+
+            .pa-leader-footer {
+                min-height: 27px;
+                border-radius: 10px;
+                border: 1px solid rgba(226, 184, 78, .26);
+                background: rgba(26, 38, 53, .86);
+                padding: 4px 7px;
+                display: flex;
+                align-items: center;
+                gap: 9px;
+                color: #D7E1EC !important;
+                font-size: .66rem !important;
+                line-height: 1.18 !important;
+                font-weight: 760 !important;
+                white-space: normal !important;
+            }
+
+            .pa-leader-footer strong {
+                color: #F2CF69 !important;
+                font-weight: 900 !important;
+            }
+
+            @media (max-width: 1350px) {
+                .pa-kpi-card {
+                    min-height: 132px;
+                    height: 132px;
+                    padding: 6px 8px 5px 8px;
+                }
+
+                .pa-kpi-title {
+                    font-size: .70rem !important;
+                }
+
+                .pa-kpi-icon {
+                    width: 24px;
+                    height: 24px;
+                    min-width: 24px;
+                    font-size: .75rem;
+                }
+
+                .pa-kpi-footer,
+                .pa-leader-footer {
+                    font-size: .62rem !important;
+                }
+
+                .pa-leader-name {
+                    font-size: .70rem !important;
+                }
+            }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        spacer_left, pk1, pk2, pk3, spacer_right = st.columns(
+            [0.42, 1.0, 1.0, 1.15, 0.42],
+            gap="small",
+        )
+
+        with pk1:
+            st.markdown(
+                (
+                    '<div class="pa-kpi-card sales">'
+                    '<div class="pa-kpi-head">'
+                    '<div class="pa-kpi-icon">💵</div>'
+                    '<div class="pa-kpi-title">'
+                    'VENTA TOTAL POR FAMILIA'
+                    '</div>'
+                    '</div>'
+                    '<div class="pa-kpi-divider"></div>'
+                    '<div class="pa-kpi-main">'
+                    '<div class="pa-kpi-value">'
+                    f'{money(kpi_family_sales)}'
+                    '</div>'
+                    '</div>'
+                    '<div class="pa-kpi-footer">'
+                    '<span class="pa-kpi-footer-icon">🏷️</span>'
+                    f'<span>{html.escape(str(chart_family))}</span>'
+                    '</div>'
+                    '</div>'
+                ),
+                unsafe_allow_html=True,
+            )
+
+        with pk2:
+            st.markdown(
+                (
+                    '<div class="pa-kpi-card inventory">'
+                    '<div class="pa-kpi-head">'
+                    '<div class="pa-kpi-icon">📦</div>'
+                    '<div class="pa-kpi-title">'
+                    'INVENTARIO TOTAL POR FAMILIA'
+                    '</div>'
+                    '</div>'
+                    '<div class="pa-kpi-divider"></div>'
+                    '<div class="pa-kpi-main">'
+                    '<div class="pa-kpi-value">'
+                    f'{quantity(kpi_family_inventory, 0)}'
+                    '</div>'
+                    '</div>'
+                    '<div class="pa-kpi-footer">'
+                    '<span class="pa-kpi-footer-icon">◈</span>'
+                    '<span>EMPAQ: '
+                    f'{html.escape(kpi_family_pack)}'
+                    '</span>'
+                    '</div>'
+                    '</div>'
+                ),
+                unsafe_allow_html=True,
+            )
+
+        with pk3:
+            st.markdown(
+                (
+                    '<div class="pa-kpi-card leader">'
+                    '<div class="pa-kpi-head">'
+                    '<div class="pa-kpi-icon">🏆</div>'
+                    '<div class="pa-kpi-title">'
+                    'PRODUCTO CON MAYOR VENTA'
+                    '</div>'
+                    '</div>'
+                    '<div class="pa-kpi-divider"></div>'
+                    '<div class="pa-leader-main">'
+                    '<div class="pa-leader-name">'
+                    f'{html.escape(kpi_top_product_name)}'
+                    '</div>'
+                    '<div class="pa-leader-code">'
+                    'Código: '
+                    f'<strong>{html.escape(kpi_top_product_code)}</strong>'
+                    '</div>'
+                    '<div class="pa-leader-value">'
+                    f'{money(kpi_top_product_sales)}'
+                    '</div>'
+                    '</div>'
+                    '<div class="pa-leader-footer">'
+                    '<span class="pa-kpi-footer-icon">▧</span>'
+                    '<span>Inventario: '
+                    f'<strong>{quantity(kpi_top_product_inventory, 0)}</strong>'
+                    '&nbsp;&nbsp;|&nbsp;&nbsp; EMPAQ: '
+                    f'<strong>{html.escape(kpi_top_product_pack)}</strong>'
+                    '</span>'
+                    '</div>'
+                    '</div>'
+                ),
+                unsafe_allow_html=True,
+            )
+
+        # Separación visual adicional entre los KPI y el treemap.
+        st.markdown(
+            "<div style='height:32px'></div>",
+            unsafe_allow_html=True,
+        )
+
+        family_products = (
+            filtered_df[
+                (
+                    filtered_df["FAMILIA"]
+                    .astype(str)
+                    .eq(chart_family)
+                )
+                &
+                (
+                    ~filtered_df["DESCRIPCION"]
+                    .fillna("")
+                    .astype(str)
+                    .str.strip()
+                    .str.upper()
+                    .str.startswith(
+                        "AJUSTE",
+                        na=False,
+                    )
+                )
             ]
             .groupby(
                 [
@@ -5359,7 +6010,7 @@ with tab_productos:
                     "INVENTARIO TOTAL": "sum",
                     "FECHA ULT COMPRA": "max",
                     "FECHA ULT VENTAS": "max",
-                    "EMPAQ": (
+                    "EMPAQ_ANALISIS": (
                         lambda values:
                         next(
                             (
@@ -5387,9 +6038,31 @@ with tab_productos:
             .astype(str)
         )
 
+        treemap_palette = [
+            "#2D6CDF",
+            "#13A89E",
+            "#D6A936",
+            "#7C5CE5",
+            "#3B9FE8",
+            "#2FA36B",
+            "#D96872",
+            "#C77C32",
+            "#536CB8",
+            "#2696A6",
+            "#A06CD5",
+            "#4AAE8A",
+        ]
+
+        treemap_color_map = {
+            product: treemap_palette[idx % len(treemap_palette)]
+            for idx, product in enumerate(
+                family_products["PRODUCTO"].astype(str).tolist()
+            )
+        }
+
         family_products["EMPAQ_TEXTO"] = (
             family_products[
-                "EMPAQ"
+                "EMPAQ_ANALISIS"
             ]
             .fillna("")
             .astype(str)
@@ -5441,6 +6114,138 @@ with tab_productos:
             )
         )
 
+        family_products["VENTA_TEXTO"] = (
+            family_products["$VENTAS MES ACTUAL"]
+            .apply(lambda value: f"${float(value):,.2f}")
+        )
+
+        positive_sales_total = float(
+            family_products[
+                "$VENTAS MES ACTUAL"
+            ]
+            .clip(lower=0)
+            .sum()
+        )
+
+        def _wrap_treemap_words(
+            text: str,
+            width: int,
+            max_lines: int,
+        ) -> list[str]:
+            words = str(text).split()
+            lines = []
+            current = ""
+
+            for word in words:
+                candidate = word if not current else f"{current} {word}"
+
+                if len(candidate) <= width:
+                    current = candidate
+                else:
+                    if current:
+                        lines.append(current)
+                    current = word
+
+                if len(lines) >= max_lines:
+                    break
+
+            if current and len(lines) < max_lines:
+                lines.append(current)
+
+            return lines[:max_lines]
+
+        def build_treemap_text(row) -> str:
+            code_text = str(row["#COD."]).strip()
+            description = str(row["DESCRIPCION"]).strip()
+            sales_value = float(row["$VENTAS MES ACTUAL"])
+            inventory_text = str(
+                row["INVENTARIO_TEXTO"]
+            ).strip()
+
+            if positive_sales_total > 0 and sales_value > 0:
+                share = sales_value / positive_sales_total
+            else:
+                share = 0.0
+
+            # Todos los bloques conservan el nombre del producto.
+            # Los bloques grandes muestran código, ventas e inventario.
+            # Los bloques pequeños muestran al menos nombre + inventario.
+
+            if share >= 0.10:
+                lines = _wrap_treemap_words(
+                    description,
+                    18,
+                    3,
+                )
+                body = "<br>".join(lines)
+                return (
+                    f"<b>{code_text} - {body}</b><br>"
+                    f"Ventas: {row['VENTA_TEXTO']}<br>"
+                    f"Inventario: {inventory_text}"
+                )
+
+            if share >= 0.045:
+                lines = _wrap_treemap_words(
+                    description,
+                    17,
+                    2,
+                )
+                body = "<br>".join(lines)
+                return (
+                    f"<b>{code_text} - {body}</b><br>"
+                    f"Ventas: {row['VENTA_TEXTO']}<br>"
+                    f"Inventario: {inventory_text}"
+                )
+
+            if share >= 0.018:
+                lines = _wrap_treemap_words(
+                    description,
+                    16,
+                    2,
+                )
+                body = "<br>".join(lines)
+                return (
+                    f"<b>{body}</b><br>"
+                    f"Ventas: {row['VENTA_TEXTO']}<br>"
+                    f"Inventario: {inventory_text}"
+                )
+
+            if share > 0:
+                lines = _wrap_treemap_words(
+                    description,
+                    14,
+                    1,
+                )
+                body = (
+                    lines[0]
+                    if lines
+                    else description
+                )
+                return (
+                    f"<b>{body}</b><br>"
+                    f"Inv.: {inventory_text}"
+                )
+
+            lines = _wrap_treemap_words(
+                description,
+                14,
+                1,
+            )
+            body = (
+                lines[0]
+                if lines
+                else description
+            )
+            return (
+                f"<b>{body}</b><br>"
+                f"Inv.: {inventory_text}"
+            )
+
+        family_products["TREEMAP_TEXT"] = family_products.apply(
+            build_treemap_text,
+            axis=1,
+        )
+
         fig = px.treemap(
             family_products,
             path=["PRODUCTO"],
@@ -5449,38 +6254,31 @@ with tab_productos:
                 "Distribución de ventas por producto — "
                 f"{chart_family}"
             ),
-            color="$VENTAS MES ACTUAL",
+            color="PRODUCTO",
+            color_discrete_map=treemap_color_map,
             custom_data=[
+                "PRODUCTO",
                 "INVENTARIO_TEXTO",
                 "ULT_COMPRA_TEXTO",
                 "ULT_VENTA_TEXTO",
-            ],
-            color_continuous_scale=[
-                "#10253A",
-                "#1F6B67",
-                "#27C99B",
-                "#D7AE58",
+                "VENTA_TEXTO",
+                "TREEMAP_TEXT",
             ],
         )
 
         fig.update_traces(
-            texttemplate=(
-                "<b>%{label}</b><br>"
-                "Ventas: $%{value:,.2f}<br>"
-                "Inventario: %{customdata[0]}<br>"
-                "Últ. compra: %{customdata[1]}<br>"
-                "Últ. venta: %{customdata[2]}"
-            ),
+            texttemplate="%{customdata[5]}",
+            textposition="middle center",
             hovertemplate=(
-                "<b>%{label}</b><br>"
-                "Ventas mes actual: $%{value:,.2f}<br>"
-                "Inventario: %{customdata[0]}<br>"
-                "Última compra: %{customdata[1]}<br>"
-                "Última venta: %{customdata[2]}"
+                "<b>%{customdata[0]}</b><br>"
+                "Ventas mes actual: %{customdata[4]}<br>"
+                "Inventario: %{customdata[1]}<br>"
+                "Última compra: %{customdata[2]}<br>"
+                "Última venta: %{customdata[3]}"
                 "<extra></extra>"
             ),
             textfont=dict(
-                size=11,
+                size=10,
                 color="#FFFFFF",
                 family=(
                     "Inter, Segoe UI, Arial, sans-serif"
@@ -5488,18 +6286,36 @@ with tab_productos:
             ),
             marker=dict(
                 line=dict(
-                    color="rgba(255,255,255,.88)",
-                    width=1.2,
-                )
+                    color="rgba(235,242,248,.70)",
+                    width=1.0,
+                ),
+                pad=dict(
+                    t=6,
+                    l=6,
+                    r=6,
+                    b=6,
+                ),
+            ),
+            tiling=dict(
+                packing="squarify",
+                pad=3,
+            ),
+            pathbar=dict(
+                visible=False,
             ),
         )
 
         fig.update_layout(
-            height=680,
+            height=550,
+            autosize=True,
             template="plotly_dark",
-            paper_bgcolor="rgba(0,0,0,0)",
+            paper_bgcolor="#091625",
+            plot_bgcolor="#091625",
             font=dict(
-                color="#DCE7F1"
+                color="#E7EFF6",
+                family=(
+                    "Inter, Segoe UI, Arial, sans-serif"
+                ),
             ),
             title=dict(
                 text=(
@@ -5512,6 +6328,8 @@ with tab_productos:
                 ),
                 x=0.5,
                 xanchor="center",
+                y=0.975,
+                yanchor="top",
                 font=dict(
                     color="#FFFFFF",
                     size=19,
@@ -5524,18 +6342,139 @@ with tab_productos:
                 minsize=8,
                 mode="hide",
             ),
+            showlegend=False,
+            hoverlabel=dict(
+                bgcolor="#06131F",
+                bordercolor="#6886A0",
+                font_color="#FFFFFF",
+                font_size=11,
+            ),
+            transition=dict(duration=0),
+            uirevision=str(chart_family),
             margin=dict(
-                l=20,
-                r=20,
+                l=18,
+                r=18,
                 t=82,
-                b=20,
+                b=18,
             ),
         )
 
-        st.plotly_chart(
-            fig,
-            use_container_width=True,
+        # ----------------------------------------------------
+        # CLIC REAL SOBRE EL TREEMAP
+        # ----------------------------------------------------
+        # st.plotly_chart(on_select=...) no devuelve el clic
+        # de un treemap de forma confiable. Para este gráfico
+        # se captura directamente el evento plotly_click.
+        if plotly_events is None:
+            st.error(
+                "Falta instalar 'streamlit-plotly-events'. "
+                "Ejecute: pip install streamlit-plotly-events"
+            )
+
+            st.plotly_chart(
+                fig,
+                use_container_width=True,
+                key="family_product_treemap_fallback",
+            )
+
+        else:
+            clicked_treemap_points = plotly_events(
+                fig,
+                click_event=True,
+                select_event=False,
+                hover_event=False,
+                override_height=550,
+                override_width="100%",
+                key=(
+                    "family_product_treemap_click_"
+                    f"{st.session_state.get('treemap_selection_reset_token', 0)}"
+                ),
+            )
+
+            clicked_product = None
+
+            if clicked_treemap_points:
+                clicked_point = clicked_treemap_points[0]
+
+                point_number = (
+                    clicked_point.get("pointNumber")
+                    if isinstance(clicked_point, dict)
+                    else None
+                )
+
+                if point_number is None and isinstance(
+                    clicked_point,
+                    dict,
+                ):
+                    point_number = clicked_point.get(
+                        "pointIndex"
+                    )
+
+                try:
+                    point_number = int(point_number)
+                except (
+                    TypeError,
+                    ValueError,
+                ):
+                    point_number = None
+
+                if point_number is not None:
+                    treemap_labels = list(
+                        fig.data[0].labels
+                    )
+
+                    if (
+                        0
+                        <= point_number
+                        < len(treemap_labels)
+                    ):
+                        clicked_product = str(
+                            treemap_labels[
+                                point_number
+                            ]
+                        )
+
+            if (
+                clicked_product
+                and clicked_product
+                != st.session_state.get(
+                    "selected_product_from_treemap"
+                )
+            ):
+                st.session_state[
+                    "selected_product_from_treemap"
+                ] = clicked_product
+
+                st.session_state[
+                    "selected_product_family"
+                ] = chart_family
+
+                # Evitamos una segunda recarga completa del dashboard.
+
+        selected_product_badge = (
+            st.session_state.get(
+                "selected_product_from_treemap"
+            )
         )
+
+        if selected_product_badge:
+            st.markdown(
+                (
+                    '<div style="'
+                    'margin-top:6px;'
+                    'padding:8px 12px;'
+                    'border-radius:9px;'
+                    'background:rgba(34,211,238,.09);'
+                    'border:1px solid rgba(34,211,238,.30);'
+                    'color:#DDF8FF;'
+                    'font-size:.80rem;'
+                    'font-weight:750;">'
+                    '🎯 Producto seleccionado: '
+                    f'{html.escape(str(selected_product_badge))}'
+                    '</div>'
+                ),
+                unsafe_allow_html=True,
+            )
 
     else:
         st.info(
@@ -5555,10 +6494,24 @@ with tab_productos:
 
     selected_family_products_chart = (
         filtered_df[
-            filtered_df["FAMILIA"]
-            .astype(str)
-            .eq(
-                chart_family
+            (
+                filtered_df["FAMILIA"]
+                .astype(str)
+                .eq(
+                    chart_family
+                )
+            )
+            &
+            (
+                ~filtered_df["DESCRIPCION"]
+                .fillna("")
+                .astype(str)
+                .str.strip()
+                .str.upper()
+                .str.startswith(
+                    "AJUSTE",
+                    na=False,
+                )
             )
         ]
         .groupby(
@@ -5598,16 +6551,29 @@ with tab_productos:
         selected_family_products_chart[
             "PRODUCTO"
         ]
-        .apply(
-            lambda value:
-            (
-                value
-                if len(value) <= 42
-                else value[:41].rstrip()
-                + "…"
-            )
+        .astype(str)
+    )
+
+    selected_treemap_product = (
+        st.session_state.get(
+            "selected_product_from_treemap"
         )
     )
+
+    if selected_treemap_product:
+        selected_family_products_chart = (
+            selected_family_products_chart[
+                selected_family_products_chart[
+                    "PRODUCTO"
+                ]
+                .astype(str)
+                .eq(
+                    str(selected_treemap_product)
+                )
+            ]
+            .copy()
+            .reset_index(drop=True)
+        )
 
     selected_family_products_chart[
         "VENTA_LABEL"
@@ -5661,16 +6627,16 @@ with tab_productos:
     )
 
     chart_colors = [
-        "#22B8C7",
-        "#E1B750",
-        "#9D58D6",
-        "#E56B6F",
-        "#B8DF7A",
-        "#5577D9",
-        "#B66B3D",
-        "#5C9AAE",
-        "#E27D6A",
-        "#7B65D1",
+        "#22D3EE",  # cian brillante
+        "#F6C453",  # dorado elegante
+        "#A855F7",  # violeta intenso
+        "#FF6B6B",  # coral vivo
+        "#4ADE80",  # verde esmeralda
+        "#60A5FA",  # azul eléctrico
+        "#F97316",  # naranja moderno
+        "#2DD4BF",  # turquesa
+        "#FB7185",  # rosa coral
+        "#818CF8",  # índigo
     ]
 
     fig = go.Figure()
@@ -5707,9 +6673,10 @@ with tab_productos:
                     color=chart_colors[
                         idx % len(chart_colors)
                     ],
+                    opacity=0.98,
                     line=dict(
-                        color="rgba(255,255,255,.16)",
-                        width=1.0,
+                        color="rgba(255,255,255,.42)",
+                        width=1.25,
                     ),
                 ),
                 text=[sales_label],
@@ -5730,7 +6697,7 @@ with tab_productos:
     fig.update_layout(
         template="plotly_dark",
         barmode="overlay",
-        height=610,
+        height=470,
         paper_bgcolor="#121A28",
         plot_bgcolor="#121A28",
         font=dict(
@@ -5743,7 +6710,7 @@ with tab_productos:
             text=(
                 "<b>VENTAS POR PRODUCTO</b>"
                 "<br>"
-                "<span style='font-size:15px;"
+                "<span style='font-size:12px;"
                 "color:#D8AE53;"
                 "letter-spacing:0.05em;'>"
                 f"{html.escape(str(chart_family))}"
@@ -5754,7 +6721,7 @@ with tab_productos:
             y=0.97,
             yanchor="top",
             font=dict(
-                size=24,
+                size=19,
                 color="#FFFFFF",
                 family=(
                     "Aptos Display, Inter, "
@@ -5763,24 +6730,25 @@ with tab_productos:
             ),
         ),
         margin=dict(
-            l=270,
-            r=120,
-            t=100,
-            b=85,
+            l=28,
+            r=92,
+            t=78,
+            b=34,
         ),
-        bargap=0.28,
+        bargap=0.14,
         xaxis=dict(
             title="",
             tickprefix="$",
             tickformat="~s",
             showgrid=True,
-            gridcolor="rgba(130,145,160,.13)",
+            rangemode="tozero",
+            gridcolor="rgba(120,150,180,.11)",
             griddash="dot",
             zeroline=False,
             linecolor="#314257",
             tickfont=dict(
-                size=10,
-                color="#B7C5D4",
+                size=9,
+                color="#AFC2D6",
             ),
         ),
         yaxis=dict(
@@ -5794,9 +6762,16 @@ with tab_productos:
                 )
             ),
             tickfont=dict(
-                size=10,
-                color="#F0F4F8",
+                size=8,
+                color="#F2F6FA",
             ),
+            ticklabelposition="outside",
+            ticklabelstandoff=6,
+            ticks="outside",
+            ticklen=4,
+            tickcolor="rgba(160,185,210,.36)",
+            showline=True,
+            linecolor="rgba(74,101,130,.34)",
             showgrid=False,
             automargin=True,
         ),
@@ -5816,63 +6791,325 @@ with tab_productos:
                 x1=1.025,
                 y1=1.04,
                 line=dict(
-                    color="rgba(88,108,132,.50)",
+                    color="rgba(88,126,160,.36)",
                     width=1.2,
                 ),
                 fillcolor="rgba(0,0,0,0)",
                 layer="below",
             ),
-            dict(
-                type="rect",
-                xref="paper",
-                yref="paper",
-                x0=-0.02,
-                y0=-0.14,
-                x1=1.02,
-                y1=-0.055,
-                line=dict(
-                    color="rgba(88,108,132,.40)",
-                    width=1,
-                ),
-                fillcolor="#1A2638",
-                layer="below",
-            ),
-        ],
-        annotations=[
-            dict(
-                x=0.5,
-                y=-0.098,
-                xref="paper",
-                yref="paper",
-                showarrow=False,
-                text=(
-                    "<span style='color:#DDE7F1;"
-                    "font-size:13px;'>"
-                    "Ventas Totales de Familia: "
-                    f"<b>{money(total_family_sales_chart)}</b>"
-                    "</span>"
-                ),
-                xanchor="center",
-                yanchor="middle",
-            )
         ],
     )
 
     fig.update_traces(
         textfont=dict(
-            size=11,
-            color="#E8EDF4",
+            size=10,
+            color="#F8FBFF",
             family=(
                 "Aptos, Inter, Segoe UI, Arial, sans-serif"
             ),
         ),
     )
 
-    st.plotly_chart(
-        fig,
-        use_container_width=True,
-        key="products_selected_family_chart",
+    # ========================================================
+    # COMPARATIVO DE UNIDADES VENDIDAS:
+    # MES ANTERIOR VS MES ACTUAL
+    # ========================================================
+
+    comparison_products_df = (
+        filtered_df[
+            (
+                filtered_df["FAMILIA"]
+                .astype(str)
+                .eq(str(chart_family))
+            )
+            &
+            (
+                ~filtered_df["DESCRIPCION"]
+                .fillna("")
+                .astype(str)
+                .str.strip()
+                .str.upper()
+                .str.startswith(
+                    "AJUSTE",
+                    na=False,
+                )
+            )
+        ]
+        .groupby(
+            [
+                "#COD.",
+                "DESCRIPCION",
+            ],
+            dropna=False,
+            as_index=False,
+        )
+        .agg(
+            {
+                "#VENTAS MES ANTERIOR": "sum",
+                "#VENTAS MES ACTUAL": "sum",
+            }
+        )
     )
+
+    comparison_products_df[
+        "PRODUCTO"
+    ] = (
+        comparison_products_df[
+            "#COD."
+        ]
+        .astype(str)
+        + " - "
+        + comparison_products_df[
+            "DESCRIPCION"
+        ]
+        .astype(str)
+    )
+
+    if selected_treemap_product:
+        comparison_products_df = (
+            comparison_products_df[
+                comparison_products_df[
+                    "PRODUCTO"
+                ]
+                .astype(str)
+                .eq(
+                    str(selected_treemap_product)
+                )
+            ]
+            .copy()
+            .reset_index(drop=True)
+        )
+
+    # Comparación producto por producto.
+    # Se muestran TODOS los productos de la familia seleccionada.
+    comparison_products_df = (
+        comparison_products_df
+        .sort_values(
+            "#VENTAS MES ACTUAL",
+            ascending=False,
+        )
+        .copy()
+        .reset_index(drop=True)
+    )
+
+    # Orden invertido para que el producto con mayor venta
+    # aparezca en la parte superior de la gráfica horizontal.
+    comparison_order = list(
+        reversed(
+            comparison_products_df[
+                "PRODUCTO"
+            ].tolist()
+        )
+    )
+
+    comparison_chart_height = max(
+        495,
+        150 + (
+            len(comparison_products_df)
+            * 34
+        ),
+    )
+
+    fig_compare = go.Figure()
+
+    fig_compare.add_trace(
+        go.Bar(
+            x=comparison_products_df[
+                "#VENTAS MES ANTERIOR"
+            ],
+            y=comparison_products_df[
+                "PRODUCTO"
+            ],
+            orientation="h",
+            name="Ventas mes anterior",
+            marker=dict(
+                color="#F6B73C",
+                opacity=0.98,
+                line=dict(
+                    color="#FFD978",
+                    width=1.25,
+                ),
+            ),
+            text=comparison_products_df[
+                "#VENTAS MES ANTERIOR"
+            ].apply(
+                lambda value:
+                f"{value:,.0f}"
+            ),
+            textposition="outside",
+            cliponaxis=False,
+            customdata=comparison_products_df[
+                ["PRODUCTO"]
+            ],
+            hovertemplate=(
+                "<b>%{customdata[0]}</b><br>"
+                "Mes anterior: %{x:,.0f}"
+                "<extra></extra>"
+            ),
+        )
+    )
+
+    fig_compare.add_trace(
+        go.Bar(
+            x=comparison_products_df[
+                "#VENTAS MES ACTUAL"
+            ],
+            y=comparison_products_df[
+                "PRODUCTO"
+            ],
+            orientation="h",
+            name="Ventas mes actual",
+            marker=dict(
+                color="#16D7D0",
+                opacity=0.98,
+                line=dict(
+                    color="#71FFF8",
+                    width=1.25,
+                ),
+            ),
+            text=comparison_products_df[
+                "#VENTAS MES ACTUAL"
+            ].apply(
+                lambda value:
+                f"{value:,.0f}"
+            ),
+            textposition="outside",
+            cliponaxis=False,
+            customdata=comparison_products_df[
+                ["PRODUCTO"]
+            ],
+            hovertemplate=(
+                "<b>%{customdata[0]}</b><br>"
+                "Mes actual: %{x:,.0f}"
+                "<extra></extra>"
+            ),
+        )
+    )
+
+    fig_compare.update_layout(
+        template="plotly_dark",
+        barmode="group",
+        height=comparison_chart_height,
+        paper_bgcolor="#121A28",
+        plot_bgcolor="#121A28",
+        font=dict(
+            color="#E6EDF5",
+            family=(
+                "Aptos, Inter, Segoe UI, Arial, sans-serif"
+            ),
+        ),
+        title=dict(
+            text=(
+                "<b>COMPARACIÓN DE VENTAS POR PRODUCTO</b>"
+                "<br>"
+                "<span style='font-size:13px;"
+                "color:#D8AE53;"
+                "letter-spacing:0.05em;'>"
+                f"{html.escape(str(chart_family))}"
+                "</span>"
+            ),
+            x=0.5,
+            xanchor="center",
+            y=0.97,
+            yanchor="top",
+            font=dict(
+                size=18,
+                color="#FFFFFF",
+                family=(
+                    "Aptos Display, Inter, "
+                    "Segoe UI, Arial, sans-serif"
+                ),
+            ),
+        ),
+        margin=dict(
+            l=230,
+            r=72,
+            t=92,
+            b=88,
+        ),
+        bargap=0.20,
+        bargroupgap=0.08,
+        xaxis=dict(
+            title="# Ventas",
+            showgrid=True,
+            gridcolor="rgba(120,150,180,.11)",
+            griddash="dot",
+            zeroline=False,
+            linecolor="#314257",
+            tickfont=dict(
+                size=9,
+                color="#AFC2D6",
+            ),
+        ),
+        yaxis=dict(
+            title="",
+            categoryorder="array",
+            categoryarray=comparison_order,
+            tickfont=dict(
+                size=8,
+                color="#EEF5FB",
+            ),
+            ticklabelposition="outside",
+            ticks="outside",
+            ticklen=4,
+            tickcolor="rgba(160,185,210,.42)",
+            showgrid=False,
+            automargin=True,
+        ),
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.13,
+            xanchor="center",
+            x=0.5,
+            bgcolor="rgba(8,22,38,.45)",
+            bordercolor="rgba(110,145,180,.22)",
+            borderwidth=1,
+            font=dict(
+                size=10,
+                color="#F3F7FB",
+            ),
+        ),
+        hoverlabel=dict(
+            bgcolor="#081625",
+            bordercolor="#5B7898",
+            font_color="#FFFFFF",
+            font_size=11,
+        ),
+    )
+
+    fig_compare.update_traces(
+        textfont=dict(
+            size=9,
+            color="#FFFFFF",
+            family=(
+                "Aptos, Inter, Segoe UI, Arial, sans-serif"
+            ),
+        ),
+    )
+
+    # ========================================================
+    # MOSTRAR AMBAS GRÁFICAS LADO A LADO
+    # ========================================================
+
+    chart_left_col, chart_right_col = st.columns(
+        [1.18, 0.82],
+        gap="medium",
+    )
+
+    with chart_left_col:
+        st.plotly_chart(
+            fig,
+            use_container_width=True,
+            key="products_selected_family_chart",
+        )
+
+    with chart_right_col:
+        st.plotly_chart(
+            fig_compare,
+            use_container_width=True,
+            key="products_month_comparison_chart",
+        )
 
 
     # ========================================================
@@ -5919,51 +7156,56 @@ with tab_productos:
         else "Todas las familias"
     )
 
-    st.markdown(
-        (
-            '<div class="executive-table-title" '
-            'style="border-left-color:#00D8F0;">'
-            '🧾 Detalle por producto'
-            '<span style="margin-left:10px;'
-            'color:#D7AE58;'
-            'font-size:.72rem;'
-            'font-weight:800;">'
-            f'{html.escape(detail_family_label)}'
-            '</span>'
-            '</div>'
-        ),
-        unsafe_allow_html=True,
-    )
+    with st.expander(
+        f"🧾 Detalle por producto · {detail_family_label}",
+        expanded=False,
+    ):
+        st.markdown(
+            (
+                '<div class="executive-table-title" '
+                'style="border-left-color:#00D8F0;'
+                'margin-top:2px;">'
+                '🧾 Detalle por producto'
+                '<span style="margin-left:10px;'
+                'color:#D7AE58;'
+                'font-size:.72rem;'
+                'font-weight:800;">'
+                f'{html.escape(detail_family_label)}'
+                '</span>'
+                '</div>'
+            ),
+            unsafe_allow_html=True,
+        )
 
-    render_executive_html_table(
-        product_detail_filtered,
-        column_labels={
-            "FAMILIA": "Familia",
-            "#COD.": "Código",
-            "DESCRIPCION": "Descripción",
-            "$VENTAS MES ACTUAL": "Ventas Mes Actual ($)",
-            "#VENTAS MES ANTERIOR": "Ventas Mes Anterior",
-            "#VENTAS MES ACTUAL": "Ventas Mes Actual",
-            "#VENTAS PERDIDAS": "Ventas Perdidas",
-            "INVENTARIO TOTAL": "Inventario Total",
-            "COSTO ACTUAL": "Costo Actual ($)",
-            "PRECIO PROMEDIO": "Precio Promedio ($)",
-            "% MAGERN S/VENTA": "Margen (%)",
-            "$UTILIDAD MES ACTUAL": "Utilidad Mes Actual ($)",
-        },
-        formats={
-            "$VENTAS MES ACTUAL": "money",
-            "#VENTAS MES ANTERIOR": "number2",
-            "#VENTAS MES ACTUAL": "number2",
-            "#VENTAS PERDIDAS": "number2",
-            "INVENTARIO TOTAL": "number2",
-            "COSTO ACTUAL": "money",
-            "PRECIO PROMEDIO": "money",
-            "% MAGERN S/VENTA": "percent",
-            "$UTILIDAD MES ACTUAL": "money",
-        },
-        max_height=620,
-    )
+        render_executive_html_table(
+            product_detail_filtered,
+            column_labels={
+                "FAMILIA": "Familia",
+                "#COD.": "Código",
+                "DESCRIPCION": "Descripción",
+                "$VENTAS MES ACTUAL": "Ventas Mes Actual ($)",
+                "#VENTAS MES ANTERIOR": "Ventas Mes Anterior",
+                "#VENTAS MES ACTUAL": "Ventas Mes Actual",
+                "#VENTAS PERDIDAS": "Ventas Perdidas",
+                "INVENTARIO TOTAL": "Inventario Total",
+                "COSTO ACTUAL": "Costo Actual ($)",
+                "PRECIO PROMEDIO": "Precio Promedio ($)",
+                "% MAGERN S/VENTA": "Margen (%)",
+                "$UTILIDAD MES ACTUAL": "Utilidad Mes Actual ($)",
+            },
+            formats={
+                "$VENTAS MES ACTUAL": "money",
+                "#VENTAS MES ANTERIOR": "number2",
+                "#VENTAS MES ACTUAL": "number2",
+                "#VENTAS PERDIDAS": "number2",
+                "INVENTARIO TOTAL": "number2",
+                "COSTO ACTUAL": "money",
+                "PRECIO PROMEDIO": "money",
+                "% MAGERN S/VENTA": "percent",
+                "$UTILIDAD MES ACTUAL": "money",
+            },
+            max_height=620,
+        )
 
 
 # ============================================================
@@ -7753,7 +8995,7 @@ with tab_alertas:
         }
 
         .alert-summary-value {
-            font-size: 1.55rem;
+            font-size: .80rem;
             font-weight: 900;
             line-height: 1.05;
             margin-bottom: 5px;
@@ -9004,7 +10246,7 @@ st.markdown(
     .family-meeting-card {
         margin-top: 8px;
         padding: 13px 14px;
-        border-radius: 12px;
+        border-radius: 10px;
         border: 1px solid #29445E;
         border-left: 4px solid #D7AE58;
         background:
@@ -9109,7 +10351,7 @@ st.markdown(
     <style>
     .executive-table-title {
         margin-top: 12px !important;
-        margin-bottom: 7px !important;
+        margin-bottom: 5px !important;
         padding: 9px 12px !important;
         background:
             linear-gradient(
@@ -9123,7 +10365,7 @@ st.markdown(
         color: #F1F5F9 !important;
         font-family:
             "Inter","Segoe UI",Arial,sans-serif !important;
-        font-size: .76rem !important;
+        font-size: .66rem !important;
         font-weight: 780 !important;
         letter-spacing: .01em !important;
     }
@@ -9245,7 +10487,7 @@ st.markdown(
         color: var(--kpi-accent);
         font-family:
             "Inter","Segoe UI",Arial,sans-serif;
-        font-size: 1.05rem;
+        font-size: .80rem;
         font-weight: 880;
         line-height: 1.05;
         letter-spacing: -.02em;
@@ -9357,7 +10599,7 @@ st.markdown(
 
     .family-selected-kpi-head {
         margin-top: 8px !important;
-        margin-bottom: 6px !important;
+        margin-bottom: 5px !important;
         font-size: .62rem !important;
     }
     </style>
@@ -9425,7 +10667,7 @@ st.markdown(
         max-height: 680px;
         overflow: auto;
         border: 1px solid #294158;
-        border-radius: 12px;
+        border-radius: 10px;
         background: #0C1928;
         box-shadow:
             0 10px 28px rgba(0,0,0,.15);
@@ -9671,7 +10913,7 @@ st.markdown(
             "Segoe UI",
             Arial,
             sans-serif !important;
-        font-size: .80rem !important;
+        font-size: .70rem !important;
         font-weight: 500 !important;
         letter-spacing: .01em;
     }
@@ -9723,7 +10965,7 @@ st.markdown(
         font-size: .53rem !important;
         line-height: 1.08 !important;
         letter-spacing: .025em !important;
-        margin-bottom: 7px !important;
+        margin-bottom: 5px !important;
         overflow: visible !important;
         white-space: normal !important;
         word-break: normal !important;
@@ -9732,7 +10974,7 @@ st.markdown(
     /* Valores numéricos: siempre en una sola línea */
     .exec-kpi-value,
     .leader-value {
-        font-size: .88rem !important;
+        font-size: .66rem !important;
         line-height: 1.04 !important;
         letter-spacing: -.015em !important;
         white-space: nowrap !important;
@@ -9743,27 +10985,33 @@ st.markdown(
 
     /* Nombres de familia/producto */
     .leader-name {
-        font-size: .70rem !important;
-        line-height: 1.08 !important;
-        margin-bottom: 4px !important;
+        font-size: .90rem !important;
+        line-height: 1.18 !important;
+        margin-bottom: 8px !important;
         display: -webkit-box !important;
-        -webkit-line-clamp: 2 !important;
+        -webkit-line-clamp: 3 !important;
         -webkit-box-orient: vertical !important;
         overflow: hidden !important;
         word-break: normal !important;
+        color:#E8C96C !important;
+        font-weight:840 !important;
     }
 
     .leader-code {
-        font-size: .52rem !important;
-        line-height: 1.05 !important;
-        margin-bottom: 3px !important;
-        white-space: nowrap !important;
+        font-size: .70rem !important;
+        line-height: 1.18 !important;
+        margin-bottom: 5px !important;
+        white-space: normal !important;
+        color:#C9DCF4 !important;
+        font-weight:760 !important;
     }
 
     .exec-kpi-note {
-        font-size: .50rem !important;
-        line-height: 1.05 !important;
-        padding-top: 5px !important;
+        font-size: .64rem !important;
+        line-height: 1.18 !important;
+        padding-top: 8px !important;
+        color:#BFD7F2 !important;
+        font-weight:760 !important;
     }
 
     /* Reducir separación entre columnas para ganar ancho útil */
@@ -9780,7 +11028,7 @@ st.markdown(
     @media (max-width: 1500px) {
         .exec-kpi-value,
         .leader-value {
-            font-size: .80rem !important;
+            font-size: .70rem !important;
         }
 
         .exec-kpi-label,
@@ -9813,7 +11061,7 @@ st.markdown(
 
     /* Acercar el contenido inmediatamente posterior al header */
     .dash-header {
-        margin-bottom: 6px !important;
+        margin-bottom: 5px !important;
     }
 
     /* Reducir espacios innecesarios entre bloques principales */
@@ -9843,13 +11091,31 @@ st.markdown(
     /* Mantener el dashboard compacto, pero con aire visual */
     .family-selected-kpi-head {
         margin-top: 10px !important;
-        margin-bottom: 7px !important;
+        margin-bottom: 5px !important;
     }
 
     .family-compact-kpi {
         margin-bottom: 2px !important;
     }
-    </style>
+    
+
+/* ==========================================================
+   TÍTULOS KPI — ANÁLISIS DE PRODUCTOS
+   Regla específica para evitar que estilos globales los reduzcan
+   ========================================================== */
+.product-analysis-kpi-title {
+    color: #79D8FF !important;
+    font-size: .70rem !important;
+    line-height: 1.18 !important;
+    font-weight: 900 !important;
+    letter-spacing: .025em !important;
+    margin-bottom: 12px !important;
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    word-break: normal !important;
+}
+</style>
     """,
     unsafe_allow_html=True,
 )
