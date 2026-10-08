@@ -22,10 +22,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-try:
-    from streamlit_plotly_events import plotly_events
-except ImportError:
-    plotly_events = None
+
 
 
 # ============================================================
@@ -279,8 +276,8 @@ st.markdown(
         background:linear-gradient(145deg,#16273C 0%,#101E30 100%) !important;
         border:1px solid #2A425B !important;
         border-radius:13px !important;
-        padding:13px 13px 11px !important;
-        height:128px !important;
+        padding:18px 18px 15px !important;
+        height:158px !important;
         width:100% !important;
         box-sizing:border-box;
         box-shadow:0 10px 26px rgba(0,0,0,.17),inset 0 1px 0 rgba(255,255,255,.025);
@@ -301,8 +298,8 @@ st.markdown(
     }
 
     .exec-kpi-label,.leader-label {
-        color:#BFCAD6 !important;
-        font-size:.59rem !important;
+        color:#D5E1EC !important;
+        font-size:16px !important;
         line-height:1.18 !important;
         font-weight:780 !important;
         text-transform:uppercase;
@@ -312,7 +309,7 @@ st.markdown(
 
     .exec-kpi-value {
         color:var(--accent) !important;
-        font-size:1.02rem !important;
+        font-size:20px !important;
         line-height:1.06 !important;
         font-weight:860 !important;
         letter-spacing:-.025em !important;
@@ -325,7 +322,7 @@ st.markdown(
         border-top:1px solid rgba(116, 170, 224, .45) !important;
         padding-top:8px !important;
         color:#EAF4FF !important;
-        font-size:.92rem !important;
+        font-size:15px !important;
         font-weight:780 !important;
         line-height:1.20 !important;
         text-shadow:0 0 1px rgba(255,255,255,.08);
@@ -333,7 +330,7 @@ st.markdown(
 
     .leader-name {
         color:var(--accent) !important;
-        font-size:.80rem !important;
+        font-size:18px !important;
         font-weight:840 !important;
         line-height:1.14 !important;
         margin-bottom:4px !important;
@@ -343,8 +340,8 @@ st.markdown(
         -webkit-box-orient:vertical;
     }
 
-    .leader-code { color:#F7FBFF !important; font-size:.92rem !important; font-weight:780 !important; line-height:1.20 !important; text-shadow:0 0 1px rgba(255,255,255,.08); }
-    .leader-value { color:#FFFFFF !important; font-size:1.18rem !important; font-weight:860 !important; line-height:1.18 !important; }
+    .leader-code { color:#F7FBFF !important; font-size:15px !important; font-weight:780 !important; line-height:1.22 !important; text-shadow:0 0 1px rgba(255,255,255,.08); }
+    .leader-value { color:#FFFFFF !important; font-size:20px !important; font-weight:860 !important; line-height:1.18 !important; }
 
     div[data-baseweb="tab-list"] {
         gap:6px !important;
@@ -2010,37 +2007,39 @@ def clean_dataframe(
 
 
     # --------------------------------------------------------
-    # EMPAQ PARA ANÁLISIS
+    # REGLA GLOBAL AJUSTE / AJUSTES
     # --------------------------------------------------------
-    # Regla global del dashboard:
-    # cualquier fila cuya DESCRIPCION comience con "AJUSTES"
-    # no participa al determinar unidades / empaques.
-    # La columna EMPAQ original se conserva intacta para
-    # visualización de datos originales.
-
-    if (
-        "EMPAQ" in result.columns
-        and "DESCRIPCION" in result.columns
-    ):
-        ajustes_mask = (
+    # Toda descripción que COMIENCE con "AJUSTE" queda marcada.
+    # startswith("AJUSTE") incluye tanto AJUSTE como AJUSTES.
+    # Esta marca se utiliza en todo el dashboard para:
+    # - excluir esos productos de selectores/listas de productos;
+    # - excluirlos de cálculos de inventario;
+    # - excluirlos del análisis de EMPAQ.
+    if "DESCRIPCION" in result.columns:
+        result["AJUSTE_PRODUCTO"] = (
             result["DESCRIPCION"]
             .astype("string")
             .fillna("")
             .str.strip()
             .str.upper()
-            .str.startswith("AJUSTES")
+            .str.startswith(
+                "AJUSTE",
+                na=False,
+            )
         )
+    else:
+        result["AJUSTE_PRODUCTO"] = False
 
+    # --------------------------------------------------------
+    # EMPAQ PARA ANÁLISIS
+    # --------------------------------------------------------
+    if "EMPAQ" in result.columns:
         result["EMPAQ_ANALISIS"] = (
             result["EMPAQ"]
             .mask(
-                ajustes_mask,
+                result["AJUSTE_PRODUCTO"],
                 pd.NA,
             )
-        )
-    elif "EMPAQ" in result.columns:
-        result["EMPAQ_ANALISIS"] = (
-            result["EMPAQ"].copy()
         )
 
 
@@ -2128,6 +2127,24 @@ def clean_dataframe(
             errors="coerce",
 
         )
+
+
+    # --------------------------------------------------------
+    # INVENTARIO PARA ANÁLISIS — EXCLUSIÓN GLOBAL DE AJUSTES
+    # --------------------------------------------------------
+    # Se conserva el valor fuente en una columna interna y el
+    # INVENTARIO TOTAL analítico se lleva a 0 para AJUSTE/AJUSTES.
+    # De esta forma ningún KPI, gráfica o tabla de inventario
+    # suma esos productos en ninguna pestaña del dashboard.
+    if "INVENTARIO TOTAL" in result.columns:
+        result["INVENTARIO_TOTAL_ORIGINAL"] = (
+            result["INVENTARIO TOTAL"].copy()
+        )
+
+        result.loc[
+            result["AJUSTE_PRODUCTO"],
+            "INVENTARIO TOTAL",
+        ] = 0.0
 
 
     # --------------------------------------------------------
@@ -3028,28 +3045,62 @@ def render_welcome_login_screen() -> None:
     st.markdown(
         """
         <style>
+        /* ==========================================
+           LOGIN DICASA — COMPACTO Y CENTRADO
+           ========================================== */
+
+        .block-container {
+            /* Centrado vertical real para Streamlit.
+               El conjunto visible del login mide aproximadamente 36.5rem.
+               El espacio libre restante se reparte por igual arriba y abajo. */
+            min-height: 100vh !important;
+            padding-top:
+                max(
+                    2rem,
+                    calc((100vh - 36.5rem) / 2)
+                ) !important;
+            padding-bottom:
+                max(
+                    2rem,
+                    calc((100vh - 36.5rem) / 2)
+                ) !important;
+            box-sizing: border-box !important;
+        }
+
         .welcome-shell {
-            max-width: 920px;
-            margin: 1.0rem auto 0.75rem auto;
+            width: 100%;
+            margin: 0 auto 0.72rem auto;
         }
 
         .welcome-hero {
             background:
-                radial-gradient(circle at top left, rgba(25,245,255,0.18), transparent 28%),
-                radial-gradient(circle at top right, rgba(38,208,124,0.16), transparent 26%),
-                linear-gradient(135deg, rgba(21,33,58,0.96) 0%, rgba(13,24,47,0.98) 100%);
-            border: 1px solid rgba(88, 200, 255, 0.24);
-            border-top: 4px solid #20F0FF;
-            border-radius: 28px;
-            padding: 2.2rem 2.4rem 2rem 2.4rem;
-            box-shadow: 0 24px 80px rgba(0,0,0,0.38);
+                radial-gradient(
+                    circle at top left,
+                    rgba(25,245,255,0.15),
+                    transparent 30%
+                ),
+                radial-gradient(
+                    circle at top right,
+                    rgba(38,208,124,0.11),
+                    transparent 28%
+                ),
+                linear-gradient(
+                    135deg,
+                    rgba(21,33,58,0.97) 0%,
+                    rgba(13,24,47,0.99) 100%
+                );
+            border: 1px solid rgba(88,200,255,0.24);
+            border-top: 3px solid #20F0FF;
+            border-radius: 18px;
+            padding: 1.35rem 1.20rem 1.25rem 1.20rem;
+            box-shadow: 0 18px 52px rgba(0,0,0,0.32);
             text-align: center;
         }
 
         .welcome-logo-wrap {
             display: flex;
             justify-content: center;
-            margin-bottom: 1.15rem;
+            margin-bottom: 0.62rem;
         }
 
         .welcome-logo-frame {
@@ -3057,16 +3108,16 @@ def render_welcome_login_screen() -> None:
             align-items: center;
             justify-content: center;
             background: rgba(255,255,255,0.98);
-            padding: 0.75rem 1rem;
-            border-radius: 14px;
+            padding: 0.34rem 0.50rem;
+            border-radius: 10px;
             box-shadow:
-                0 16px 36px rgba(32,240,255,0.10),
+                0 10px 26px rgba(32,240,255,0.08),
                 0 0 0 1px rgba(255,255,255,0.04);
         }
 
         .welcome-logo-frame img {
-            max-width: 230px;
-            max-height: 250px;
+            max-width: 118px;
+            max-height: 126px;
             width: auto;
             height: auto;
             object-fit: contain;
@@ -3074,159 +3125,235 @@ def render_welcome_login_screen() -> None:
         }
 
         .welcome-title {
-            margin: 0.2rem 0 0.4rem 0;
+            margin: 0.10rem 0 0.20rem 0;
             color: #F7FBFF;
-            font-size: 2.25rem;
-            line-height: 1.2;
-            font-weight: 800;
-            letter-spacing: 0.02em;
+            font-size: 1.34rem;
+            line-height: 1.12;
+            font-weight: 850;
+            letter-spacing: 0.018em;
             text-transform: uppercase;
         }
 
         .welcome-subtitle {
-            margin: 0.35rem 0 0.55rem 0;
+            margin: 0.18rem 0 0.22rem 0;
             color: #20F0FF;
-            font-size: 1.22rem;
+            font-size: 0.82rem;
             font-weight: 800;
-            letter-spacing: 0.10em;
+            letter-spacing: 0.085em;
             text-transform: uppercase;
         }
 
         .welcome-caption {
-            margin: 0.45rem 0 0 0;
+            margin: 0.20rem 0 0 0;
             color: #DDE8F7;
-            font-size: .75rem;
+            font-size: 0.66rem;
             font-weight: 500;
         }
 
-        .welcome-form-card {
-            max-width: 920px;
-            margin: 1.15rem auto 0 auto;
-            background: linear-gradient(180deg, rgba(6,15,29,0.92) 0%, rgba(4,10,20,0.96) 100%);
-            border: 1px solid rgba(62, 90, 130, 0.28);
-            border-radius: 22px;
-            padding: 1.3rem 1.25rem 1.15rem 1.25rem;
-            box-shadow: 0 12px 44px rgba(0,0,0,0.22);
+        div[data-testid="stForm"] {
+            border: 1px solid rgba(62,90,130,0.28) !important;
+            background:
+                linear-gradient(
+                    180deg,
+                    rgba(6,15,29,0.92) 0%,
+                    rgba(4,10,20,0.96) 100%
+                ) !important;
+            border-radius: 15px !important;
+            padding: 1.05rem 0.92rem 1.00rem 0.92rem !important;
+            box-shadow: 0 10px 34px rgba(0,0,0,0.18) !important;
         }
 
-        .welcome-field-label {
-            color: #FFFFFF;
-            font-size: .80rem;
-            font-weight: 700;
-            margin: 0.2rem 0 0.4rem 0;
-        }
-
-        .welcome-help {
-            color: #94A8C6;
-            font-size: 0.92rem;
-            margin-top: 0.25rem;
-            text-align: center;
+        div[data-testid="stTextInput"] {
+            margin-bottom: 0.10rem !important;
         }
 
         div[data-testid="stTextInput"] label,
         div[data-testid="stTextInput"] p {
             color: #FFFFFF !important;
-            font-weight: 700 !important;
+            font-weight: 750 !important;
+            font-size: 0.73rem !important;
         }
 
         div[data-testid="stTextInput"] input {
-            background: rgba(255,255,255,0.97) !important;
+            background: rgba(255,255,255,0.98) !important;
             color: #1B3152 !important;
-            border-radius: 14px !important;
-            border: 1px solid rgba(87, 115, 150, 0.35) !important;
-            padding-top: 0.95rem !important;
-            padding-bottom: 0.95rem !important;
-            font-size: 1rem !important;
-        }
-
-        div[data-testid="stForm"] {
-            border: none !important;
-            background: transparent !important;
+            border-radius: 10px !important;
+            border: 1px solid rgba(87,115,150,0.34) !important;
+            padding-top: 0.70rem !important;
+            padding-bottom: 0.70rem !important;
+            font-size: 0.86rem !important;
+            min-height: 3.05rem !important;
         }
 
         div[data-testid="stFormSubmitButton"] button {
-            background: linear-gradient(135deg, #1B2C49 0%, #223556 100%) !important;
+            background:
+                linear-gradient(
+                    135deg,
+                    #1B2C49 0%,
+                    #223556 100%
+                ) !important;
             color: #FFFFFF !important;
-            border: 1px solid rgba(104, 149, 208, 0.28) !important;
-            border-radius: 14px !important;
+            border: 1px solid rgba(32,240,255,0.28) !important;
+            border-radius: 10px !important;
             font-weight: 800 !important;
-            font-size: .70rem !important;
-            padding: 0.78rem 1rem !important;
-            box-shadow: 0 10px 28px rgba(0,0,0,0.18) !important;
+            font-size: 0.72rem !important;
+            padding: 0.48rem 0.80rem !important;
+            min-height: 2.85rem !important;
+            box-shadow: 0 8px 22px rgba(0,0,0,0.16) !important;
         }
 
         div[data-testid="stFormSubmitButton"] button:hover {
-            border-color: rgba(32,240,255,0.42) !important;
+            border-color: rgba(32,240,255,0.55) !important;
             color: #FFFFFF !important;
         }
 
-        .auth-demo-note {
-            color: #A7B7D1;
-            font-size: 0.85rem;
+        .welcome-help {
+            color: #AFC2D8;
+            font-family:
+                Inter,
+                "Segoe UI",
+                "Helvetica Neue",
+                Arial,
+                sans-serif;
+            font-size: 0.88rem;
+            font-weight: 600;
+            line-height: 1.55;
+            letter-spacing: 0.018em;
+            margin-top: 0.78rem;
+            margin-bottom: 0.28rem;
             text-align: center;
-            margin-top: 0.6rem;
+        }
+
+        .welcome-corporate-footer {
+            margin: 0.58rem auto 0 auto;
+            padding: 0.34rem 0.40rem 0.18rem 0.40rem;
+            text-align: center;
+            color: #A9BDD3;
+            font-family:
+                Inter,
+                "Segoe UI",
+                "Helvetica Neue",
+                Arial,
+                sans-serif;
+            font-size: 0.82rem;
+            font-weight: 500;
+            line-height: 1.65;
+            letter-spacing: 0.018em;
+        }
+
+        .welcome-corporate-footer strong {
+            color: #F3F7FC;
+            font-size: 0.86rem;
+            font-weight: 700;
+            letter-spacing: 0.012em;
+        }
+
+        @media (max-height: 760px) {
+            .block-container {
+                min-height: 100vh !important;
+                padding-top: 1.25rem !important;
+                padding-bottom: 1.25rem !important;
+            }
+        }
+
+        @media (max-width: 900px) {
+            .welcome-title {
+                font-size: 1.12rem;
+            }
+
+            .welcome-subtitle {
+                font-size: 0.70rem;
+            }
+
+            .welcome-logo-frame img {
+                max-width: 105px;
+                max-height: 112px;
+            }
         }
         </style>
         """,
         unsafe_allow_html=True,
     )
 
-    st.markdown(
-        f"""
-        <div class="welcome-shell">
-            <div class="welcome-hero">
-                <div class="welcome-logo-wrap">
-                    <div class="welcome-logo-frame">
-                        <img src="{DICASA_WELCOME_LOGO_URI}" alt="Logo DICASA S.A." />
-                    </div>
-                </div>
-                <div class="welcome-title">
-                    Dashboard Cierre de Productos DICASA S.A
-                </div>
-                <div class="welcome-subtitle">
-                    Executive Analytics &amp; Intelligence Portal
-                </div>
-                <div class="welcome-caption">
-                    Módulo de Autenticación Comercial Restringida
-                </div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    # Columna central REAL de Streamlit:
+    # controla también el ancho de inputs y botón.
+    _, login_center, _ = st.columns(
+        [1.0, 1.22, 1.0],
+        gap="small",
     )
 
-    st.markdown('<div class="welcome-form-card">', unsafe_allow_html=True)
-
-    with st.form(
-        "login_form_dicasa",
-        clear_on_submit=False,
-    ):
-        user_value = st.text_input(
-            "Usuario",
-            placeholder="Ingrese su usuario autorizado...",
-            key="login_user",
+    with login_center:
+        welcome_hero_html = (
+            f'<div class="welcome-shell">'
+            f'<div class="welcome-hero">'
+            f'<div class="welcome-logo-wrap">'
+            f'<div class="welcome-logo-frame">'
+            f'<img src="{DICASA_WELCOME_LOGO_URI}" '
+            f'alt="Logo DICASA S.A." />'
+            f'</div>'
+            f'</div>'
+            f'<div class="welcome-title">'
+            f'Dashboard Cierre de Productos DICASA S.A'
+            f'</div>'
+            f'<div class="welcome-subtitle">'
+            f'Executive Analytics &amp; Intelligence Portal'
+            f'</div>'
+            f'<div class="welcome-caption">'
+            f'Módulo de Autenticación Comercial Restringida'
+            f'</div>'
+            f'</div>'
+            f'</div>'
         )
 
-        password_value = st.text_input(
-            "Password",
-            type="password",
-            placeholder="Ingrese su credencial comercial...",
-            key="login_password",
+        st.markdown(
+            welcome_hero_html,
+            unsafe_allow_html=True,
         )
 
-        submitted = st.form_submit_button(
-            "🔐 Ingresar al Dashboard",
-            use_container_width=True,
+        with st.form(
+            "login_form_dicasa",
+            clear_on_submit=False,
+        ):
+            user_value = st.text_input(
+                "Usuario",
+                placeholder="Ingrese su usuario autorizado...",
+                key="login_user",
+            )
+
+            password_value = st.text_input(
+                "Password",
+                type="password",
+                placeholder="Ingrese su credencial comercial...",
+                key="login_password",
+            )
+
+            submitted = st.form_submit_button(
+                "🔐 Ingresar al Dashboard",
+                use_container_width=True,
+            )
+
+        st.markdown(
+            '<div class="welcome-help">'
+            'Acceso exclusivo para personal comercial autorizado.'
+            '</div>',
+            unsafe_allow_html=True,
         )
 
-    st.markdown(
-        '<div class="welcome-help">'
-        'Acceso exclusivo para personal comercial autorizado.'
-        '</div>',
-        unsafe_allow_html=True,
-    )
+        welcome_footer_html = (
+            '<div class="welcome-corporate-footer">'
+            'Created by '
+            '<strong>'
+            'IT Department | Distribuidora Centroamérica S.A.'
+            '</strong>'
+            '<br>'
+            'Derechos Reservados © 2026'
+            '</div>'
+        )
 
-    st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown(
+            welcome_footer_html,
+            unsafe_allow_html=True,
+        )
 
     if submitted:
         if (
@@ -3235,10 +3362,15 @@ def render_welcome_login_screen() -> None:
         ):
             st.session_state["dashboard_authenticated"] = True
             st.session_state["dashboard_user"] = user_value.strip()
-            st.success("Acceso autorizado. Cargando dashboard...")
+            st.success(
+                "Acceso autorizado. Cargando dashboard..."
+            )
             st.rerun()
         else:
-            st.error("Usuario o password incorrectos. Verifique sus credenciales.")
+            st.error(
+                "Usuario o password incorrectos. "
+                "Verifique sus credenciales."
+            )
 
     st.stop()
 
@@ -3254,36 +3386,38 @@ if not st.session_state["dashboard_authenticated"]:
 # TÍTULO
 # ============================================================
 
+dashboard_header_html = (
+    f'<div class="dash-header dicasa-corporate-header">'
+    f'<div class="dicasa-header-logo-zone">'
+    f'<div class="dicasa-logo-frame">'
+    f'<img class="dicasa-logo-image" '
+    f'src="{DICASA_LOGO_URI}" '
+    f'alt="Logo DICASA S.A." />'
+    f'</div>'
+    f'</div>'
+    f'<div class="dicasa-header-copy">'
+    f'<div class="dicasa-title-line">'
+    f'<span class="dicasa-dashboard-title">'
+    f'{APP_TITLE}'
+    f'</span>'
+    f'<span class="dicasa-title-separator">—</span>'
+    f'<span class="dicasa-company-name">'
+    f'DICASA S.A.'
+    f'</span>'
+    f'</div>'
+    f'<div class="dash-subtitle dicasa-subtitle">'
+    f'Ventas, utilidad, inventario y análisis ejecutivo '
+    f'por familia y producto'
+    f'</div>'
+    f'</div>'
+    f'<div class="dicasa-header-badge-zone">'
+    f'<div class="dash-badge">EXECUTIVE ANALYTICS</div>'
+    f'</div>'
+    f'</div>'
+)
+
 st.markdown(
-    f"""
-    <div class="dash-header dicasa-corporate-header">
-        <div class="dash-header-left">
-            <div class="dicasa-logo-frame">
-                <img
-                    class="dicasa-logo-image"
-                    src="{DICASA_LOGO_URI}"
-                    alt="Logo DICASA S.A."
-                />
-            </div>
-            <div class="dicasa-header-copy">
-                <div class="dicasa-title-line">
-                    <span class="dicasa-dashboard-title">
-                        {APP_TITLE}
-                    </span>
-                    <span class="dicasa-title-separator">—</span>
-                    <span class="dicasa-company-name">
-                        DICASA S.A.
-                    </span>
-                </div>
-                <div class="dash-subtitle dicasa-subtitle">
-                    Ventas, utilidad, inventario y análisis ejecutivo
-                    por familia y producto
-                </div>
-            </div>
-        </div>
-        <div class="dash-badge">EXECUTIVE ANALYTICS</div>
-    </div>
-    """,
+    dashboard_header_html,
     unsafe_allow_html=True,
 )
 
@@ -3642,157 +3776,201 @@ with st.sidebar:
 # FILTROS
 # ============================================================
 
-filtered_df = (
-    df.copy()
-)
+filtered_df = df.copy()
+
+
+def _format_filter_code(value: object) -> str:
+    """Normaliza códigos para mostrarlos sin .0 innecesario."""
+    if pd.isna(value):
+        return ""
+
+    text = str(value).strip()
+
+    if text.endswith(".0"):
+        integer_part = text[:-2]
+        if integer_part.replace("-", "", 1).isdigit():
+            text = integer_part
+
+    return text
+
+
+def _clear_product_dependent_filters() -> None:
+    """
+    Sincroniza el filtro lateral de familia con Análisis de productos
+    y limpia cualquier selección de producto que ya no sea válida.
+    """
+    st.session_state["sidebar_product_filter"] = []
+    st.session_state["selected_product_from_treemap"] = None
+    st.session_state["selected_products_from_treemap"] = []
+    st.session_state["selected_product_family"] = None
+
+    sidebar_families = st.session_state.get(
+        "sidebar_family_filter",
+        [],
+    )
+
+    # Si el usuario escogió una sola familia lateralmente,
+    # el selector interno de Análisis de productos usa esa misma.
+    if len(sidebar_families) == 1:
+        st.session_state[
+            "family_product_chart"
+        ] = sidebar_families[0]
+
+    elif len(sidebar_families) > 1:
+        current_internal_family = st.session_state.get(
+            "family_product_chart"
+        )
+
+        if current_internal_family not in sidebar_families:
+            st.session_state[
+                "family_product_chart"
+            ] = sidebar_families[0]
 
 
 with st.sidebar:
 
-
     st.divider()
-
-
-    st.header(
-        "🔎 Filtros"
-    )
-
+    st.header("🔎 Filtros")
 
     # --------------------------------------------------------
     # Familia
     # --------------------------------------------------------
 
     family_values = sorted(
-
         str(value)
-
-        for value
-        in filtered_df[
-            "FAMILIA"
-        ]
-
-        .dropna()
-
-        .unique()
-
-        if str(
-            value
-        ).strip()
-
+        for value in df["FAMILIA"].dropna().unique()
+        if str(value).strip()
     )
 
+    # Sanitizar estado antes de crear el widget.
+    current_family_state = st.session_state.get(
+        "sidebar_family_filter",
+        [],
+    )
+
+    valid_family_state = [
+        value
+        for value in current_family_state
+        if value in family_values
+    ]
+
+    if current_family_state != valid_family_state:
+        st.session_state["sidebar_family_filter"] = (
+            valid_family_state
+        )
 
     selected_families = st.multiselect(
-
         "FAMILIA",
-
-        options=
-        family_values,
-
-        default=[],
-
-        placeholder=
-        "Todas las familias",
-
+        options=family_values,
+        placeholder="Todas las familias",
         help=(
-
-            "Si no selecciona nada, "
-            "se incluyen todas."
-
+            "Si no selecciona nada, se incluyen todas. "
+            "Al cambiar la familia se limpia el filtro de producto."
         ),
-
+        key="sidebar_family_filter",
+        on_change=_clear_product_dependent_filters,
     )
-
 
     if selected_families:
-
-
         filtered_df = filtered_df[
-
-            filtered_df[
-                "FAMILIA"
-            ]
-
-            .astype(
-                "string"
-            )
-
-            .isin(
-                selected_families
-            )
-
-        ]
-
+            filtered_df["FAMILIA"]
+            .astype(str)
+            .isin(selected_families)
+        ].copy()
 
     # --------------------------------------------------------
-    # Descripción
+    # Producto — Código + Descripción
     # --------------------------------------------------------
 
-    description_values = sorted(
-
-        str(value)
-
-        for value
-        in filtered_df[
-            "DESCRIPCION"
+    product_filter_source = (
+        filtered_df[
+            ~filtered_df[
+                "AJUSTE_PRODUCTO"
+            ].fillna(False)
         ]
-
-        .dropna()
-
-        .unique()
-
-        if str(
-            value
-        ).strip()
-
+        .copy()
     )
 
-
-    selected_descriptions = (
-        st.multiselect(
-
-            "Producto / DESCRIPCION",
-
-            options=
-            description_values,
-
-            default=[],
-
-            placeholder=
-            "Todos los productos",
-
-            help=(
-
-                "Si no selecciona nada, "
-                "se incluyen todos."
-
-            ),
-
-            key="sidebar_product_filter",
-
+    # Construcción vectorizada del texto de búsqueda.
+    # Evita ejecutar una función Python fila por fila en cada rerun.
+    product_code_text = (
+        product_filter_source["#COD."]
+        .astype("string")
+        .fillna("")
+        .str.strip()
+        .str.replace(
+            r"\.0$",
+            "",
+            regex=True,
         )
     )
 
+    product_filter_source["_PRODUCTO_FILTRO"] = (
+        product_code_text
+        + " - "
+        + product_filter_source["DESCRIPCION"]
+        .astype("string")
+        .fillna("")
+        .str.strip()
+    )
 
-    if selected_descriptions:
-
-
-        filtered_df = filtered_df[
-
-            filtered_df[
-                "DESCRIPCION"
-            ]
-
-            .astype(
-                "string"
-            )
-
-            .isin(
-                selected_descriptions
-            )
-
+    product_filter_values = sorted(
+        value
+        for value in product_filter_source[
+            "_PRODUCTO_FILTRO"
         ]
+        .dropna()
+        .astype(str)
+        .unique()
+        if value.strip(" -")
+    )
 
+    # Sanitizar estado si la familia cambió y alguno de los
+    # productos seleccionados ya no pertenece a las opciones.
+    current_product_state = st.session_state.get(
+        "sidebar_product_filter",
+        [],
+    )
+
+    valid_product_state = [
+        value
+        for value in current_product_state
+        if value in product_filter_values
+    ]
+
+    if current_product_state != valid_product_state:
+        st.session_state["sidebar_product_filter"] = (
+            valid_product_state
+        )
+
+    selected_products_filter = st.multiselect(
+        "Producto / CÓDIGO + DESCRIPCIÓN",
+        options=product_filter_values,
+        placeholder="Todos los productos",
+        help=(
+            "Busque escribiendo el código o cualquier parte "
+            "de la descripción."
+        ),
+        key="sidebar_product_filter",
+    )
+
+    if selected_products_filter:
+        selected_product_rows = (
+            product_filter_source[
+                product_filter_source[
+                    "_PRODUCTO_FILTRO"
+                ]
+                .astype(str)
+                .isin(selected_products_filter)
+            ]
+            .index
+        )
+
+        filtered_df = filtered_df.loc[
+            filtered_df.index.isin(
+                selected_product_rows
+            )
+        ].copy()
 
     # --------------------------------------------------------
     # Métrica fija
@@ -3800,33 +3978,59 @@ with st.sidebar:
 
     selected_metric = "$VENTAS MES ACTUAL"
 
+    # --------------------------------------------------------
+    # TOP global de visualización
+    # --------------------------------------------------------
+    # Se usa selectbox para máxima compatibilidad y respuesta inmediata.
 
-    top_n = (
-        st.radio(
+    valid_top_values = ["TODOS", 10, 20, 50]
 
-            "Cantidad de productos "
-            "a mostrar",
+    if "global_top_n" not in st.session_state:
+        st.session_state["global_top_n"] = "TODOS"
 
-            options=[
-                10,
-                20,
-            ],
+    if st.session_state["global_top_n"] not in valid_top_values:
+        st.session_state["global_top_n"] = "TODOS"
 
-            index=0,
-
-            horizontal=True,
-
-        )
+    top_choice = st.selectbox(
+        "Cantidad de productos / familias a mostrar",
+        options=valid_top_values,
+        key="global_top_n",
+        help=(
+            "TODOS conserva todos los datos filtrados. "
+            "Las gráficas pesadas limitan automáticamente "
+            "la cantidad visible para mantener el dashboard rápido."
+        ),
     )
 
+    top_label = (
+        "TODOS"
+        if top_choice == "TODOS"
+        else str(top_choice)
+    )
+
+    # Límite visual global para evitar que las pestañas ocultas
+    # intenten dibujar cientos o miles de categorías en cada rerun.
+    top_n = (
+        50
+        if top_choice == "TODOS"
+        else int(top_choice)
+    )
+
+    # Límite de datos: TODOS conserva todos los registros en tablas.
+    top_data_n = (
+        max(len(filtered_df), 1)
+        if top_choice == "TODOS"
+        else int(top_choice)
+    )
 
     st.caption(
-
-        f"Registros filtrados: "
-        f"{len(filtered_df):,}"
-
+        (
+            "TODOS aplicado al dashboard"
+            if top_choice == "TODOS"
+            else f"TOP {top_label} aplicado al dashboard"
+        )
+        + f" · Registros filtrados: {len(filtered_df):,}"
     )
-
 
 # ============================================================
 # VALIDAR FILTROS
@@ -3871,7 +4075,7 @@ product_df = (
 
 total_sales = (
     safe_sum(
-        filtered_df[
+        df[
             "$VENTAS MES ACTUAL"
         ]
     )
@@ -3880,7 +4084,7 @@ total_sales = (
 
 total_profit = (
     safe_sum(
-        filtered_df[
+        df[
             "$UTILIDAD MES ACTUAL"
         ]
     )
@@ -3889,7 +4093,7 @@ total_profit = (
 
 total_inventory = (
     safe_sum(
-        filtered_df[
+        df[
             "INVENTARIO TOTAL"
         ]
     )
@@ -3898,7 +4102,7 @@ total_inventory = (
 
 lost_sales = (
     safe_sum(
-        filtered_df[
+        df[
             "#VENTAS PERDIDAS"
         ]
     )
@@ -3907,7 +4111,7 @@ lost_sales = (
 
 average_margin = (
     safe_mean(
-        filtered_df[
+        df[
             "% MAGERN S/VENTA"
         ]
     )
@@ -3916,7 +4120,7 @@ average_margin = (
 
 product_count = (
 
-    filtered_df[
+    df[
         [
             "#COD.",
             "DESCRIPCION",
@@ -3932,7 +4136,7 @@ product_count = (
 
 family_count = (
 
-    filtered_df[
+    df[
         "FAMILIA"
     ]
 
@@ -3949,7 +4153,7 @@ family_count = (
 
 family_sales = (
 
-    filtered_df
+    df
 
     .groupby(
 
@@ -4018,7 +4222,7 @@ else:
 
 product_sales = (
 
-    filtered_df
+    df
 
     .groupby(
 
@@ -4104,7 +4308,10 @@ else:
 
 st.markdown("## Resumen ejecutivo")
 
-k1, k2, k3, k4, k5, k6, k7, k8, k9 = st.columns(9, gap="small")
+# ------------------------------------------------------------
+# FILA 1 — KPI FINANCIEROS Y OPERATIVOS
+# ------------------------------------------------------------
+k1, k2, k3, k4, k5 = st.columns(5, gap="small")
 
 with k1:
     render_exec_kpi("💵 Ventas mes", money(total_sales), "#43B9E6")
@@ -4120,6 +4327,16 @@ with k4:
 
 with k5:
     render_exec_kpi("◉ Margen promedio", percent(average_margin), "#D7AE58")
+
+st.markdown(
+    '<div style="height:28px;"></div>',
+    unsafe_allow_html=True,
+)
+
+# ------------------------------------------------------------
+# FILA 2 — DIMENSIÓN Y LIDERAZGO
+# ------------------------------------------------------------
+k6, k7, k8, k9 = st.columns(4, gap="small")
 
 with k6:
     render_exec_kpi("▣ Productos", f"{product_count:,}", "#6F91B2")
@@ -4292,6 +4509,28 @@ st.markdown("## Exploración ejecutiva")
 with tab_familia:
 
     # ========================================================
+    # CONFIGURACIÓN VISUAL DE FAMILIAS
+    # ========================================================
+    family_total_count = int(
+        filtered_df["FAMILIA"]
+        .astype("string")
+        .fillna("SIN FAMILIA")
+        .nunique()
+    )
+
+    family_visual_limit = (
+        min(30, family_total_count)
+        if top_choice == "TODOS"
+        else min(int(top_choice), family_total_count)
+    )
+
+    family_main_title = (
+        f"TOP {family_visual_limit} DE {family_total_count:,} FAMILIAS"
+        if top_choice == "TODOS"
+        else f"TOP {family_visual_limit} FAMILIAS"
+    )
+
+    # ========================================================
     # ESTADO DEL FILTRO INTERACTIVO DE FAMILIA
     # ========================================================
 
@@ -4300,25 +4539,38 @@ with tab_familia:
 
     def clear_family_selection() -> None:
         """
-        Borra por completo la selección de familia en:
-        - gráfica principal
-        - dona
-        - leyenda interactiva
+        Restablece por completo los filtros de familia/producto:
+        - filtros laterales de FAMILIA y PRODUCTO
+        - selección de familia en gráficas
+        - selección de productos del treemap
+        - estados internos dependientes
         """
+        # Filtros laterales
+        st.session_state["sidebar_family_filter"] = []
+        st.session_state["sidebar_product_filter"] = []
+
+        # Selecciones de familia
         st.session_state["selected_family_from_chart"] = None
         st.session_state["family_legend_radio"] = None
         st.session_state["family_selection_reset_token"] += 1
 
+        # Selecciones de producto dependientes
+        st.session_state["selected_product_from_treemap"] = None
+        st.session_state["selected_products_from_treemap"] = []
+        st.session_state["selected_product_family"] = None
+
+        # Forzar recreación limpia del treemap si existe
+        st.session_state["treemap_click_reset_token"] = (
+            st.session_state.get(
+                "treemap_click_reset_token",
+                0,
+            )
+            + 1
+        )
+
     # ========================================================
     # SELECTOR INTERACTIVO DE FAMILIA
     # ========================================================
-
-    st.markdown("### 💰 Ventas mes actual por familia")
-    st.caption(
-        "Se muestran las 20 familias con mayores ventas. "
-        "Haz clic sobre una barra para analizar esa familia en las demás "
-        "gráficas y tablas de esta pestaña."
-    )
 
     family_sales_selector = (
         filtered_df
@@ -4332,7 +4584,7 @@ with tab_familia:
             "$VENTAS MES ACTUAL",
             ascending=False,
         )
-        .head(20)
+        .head(family_visual_limit)
         .reset_index(drop=True)
     )
 
@@ -4435,6 +4687,538 @@ with tab_familia:
         ] = None
         selected_family = None
 
+
+    # Base de datos que alimentará las demás visualizaciones.
+    if selected_family:
+        family_focus_df = (
+            filtered_df[
+                filtered_df["FAMILIA"]
+                .astype("string")
+                .fillna("SIN FAMILIA")
+                .astype(str)
+                .eq(
+                    selected_family
+                )
+            ]
+            .copy()
+        )
+    else:
+        family_focus_df = (
+            filtered_df.copy()
+        )
+
+
+
+    # ========================================================
+    # KPI INTERACTIVOS — ANÁLISIS POR FAMILIA
+    # ========================================================
+    # Los KPI usan family_focus_df:
+    # - si hay una familia seleccionada, muestran solo esa familia;
+    # - si no hay selección, muestran el conjunto filtrado actual.
+
+    family_kpi_label = (
+        str(selected_family)
+        if selected_family
+        else "TODAS LAS FAMILIAS FILTRADAS"
+    )
+
+    family_kpi_sales = safe_sum(
+        family_focus_df[
+            "$VENTAS MES ACTUAL"
+        ]
+    )
+
+    family_kpi_inventory = safe_sum(
+        family_focus_df[
+            "INVENTARIO TOTAL"
+        ]
+    )
+
+    family_kpi_profit = safe_sum(
+        family_focus_df[
+            "$UTILIDAD MES ACTUAL"
+        ]
+    )
+
+    family_kpi_lost_sales = safe_sum(
+        family_focus_df[
+            "#VENTAS PERDIDAS"
+        ]
+    )
+
+    family_kpi_inventory_value = safe_sum(
+        (
+            family_focus_df[
+                "INVENTARIO TOTAL"
+            ]
+            .fillna(0)
+            *
+            family_focus_df[
+                "COSTO ACTUAL"
+            ]
+            .fillna(0)
+        )
+    )
+
+    family_kpi_pack_values = (
+        family_focus_df[
+            "EMPAQ_ANALISIS"
+        ]
+        .fillna("")
+        .astype(str)
+        .str.strip()
+    )
+
+    family_kpi_pack_values = [
+        value
+        for value in family_kpi_pack_values.unique().tolist()
+        if value
+        and value.upper() not in {"NAN", "NONE"}
+    ]
+
+    if len(family_kpi_pack_values) == 1:
+        family_kpi_pack = family_kpi_pack_values[0]
+    elif len(family_kpi_pack_values) > 1:
+        family_kpi_pack = "Varios empaques"
+    else:
+        family_kpi_pack = "Sin empaque"
+
+    family_kpi_top_product = (
+        family_focus_df
+        .groupby(
+            [
+                "#COD.",
+                "DESCRIPCION",
+            ],
+            dropna=False,
+            as_index=False,
+        )
+        .agg(
+            {
+                "$VENTAS MES ACTUAL": "sum",
+                "INVENTARIO TOTAL": "sum",
+                "EMPAQ_ANALISIS": (
+                    lambda series:
+                    next(
+                        (
+                            str(value).strip()
+                            for value in series
+                            if pd.notna(value)
+                            and str(value).strip()
+                            and str(value).strip().upper()
+                            not in {"NAN", "NONE"}
+                        ),
+                        "",
+                    )
+                ),
+            }
+        )
+        .sort_values(
+            "$VENTAS MES ACTUAL",
+            ascending=False,
+        )
+        .reset_index(drop=True)
+    )
+
+    if not family_kpi_top_product.empty:
+        family_kpi_top_row = (
+            family_kpi_top_product.iloc[0]
+        )
+
+        family_kpi_top_name = str(
+            family_kpi_top_row[
+                "DESCRIPCION"
+            ]
+        ).strip()
+
+        family_kpi_top_code = str(
+            family_kpi_top_row[
+                "#COD."
+            ]
+        ).strip()
+
+        family_kpi_top_sales = float(
+            family_kpi_top_row[
+                "$VENTAS MES ACTUAL"
+            ]
+        )
+
+        family_kpi_top_inventory = float(
+            family_kpi_top_row[
+                "INVENTARIO TOTAL"
+            ]
+        )
+
+        family_kpi_top_pack = str(
+            family_kpi_top_row[
+                "EMPAQ_ANALISIS"
+            ]
+        ).strip() or "Sin empaque"
+    else:
+        family_kpi_top_name = "SIN PRODUCTO"
+        family_kpi_top_code = "-"
+        family_kpi_top_sales = 0.0
+        family_kpi_top_inventory = 0.0
+        family_kpi_top_pack = "Sin empaque"
+
+    # --------------------------------------------------------
+    # Estilo de los KPI, equivalente al usado en productos.
+    # --------------------------------------------------------
+    st.markdown(
+        """
+        <style>
+        .fa-kpi-card {
+            min-height: 132px;
+            height: 132px;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid #29445F;
+            border-radius: 14px;
+            background:
+                linear-gradient(145deg,#10243A 0%,#0D1C2D 100%);
+            padding: 7px 9px 6px 9px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .fa-kpi-card::before {
+            content: "";
+            position: absolute;
+            left: 12px;
+            right: 12px;
+            top: 0;
+            height: 3px;
+            border-radius: 0 0 5px 5px;
+            background: var(--fa-accent);
+        }
+
+        .fa-kpi-head {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            min-height: 29px;
+        }
+
+        .fa-kpi-icon {
+            width: 25px;
+            height: 25px;
+            min-width: 25px;
+            border-radius: 8px;
+            border: 1px solid var(--fa-accent);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: .78rem;
+        }
+
+        .fa-kpi-title {
+            color: #4DD5FF !important;
+            font-size: .70rem !important;
+            line-height: 1.15 !important;
+            font-weight: 900 !important;
+            letter-spacing: .02em !important;
+        }
+
+        .fa-kpi-divider {
+            height: 1px;
+            background: #24415D;
+            margin: 2px 0 4px 0;
+        }
+
+        .fa-kpi-main {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 43px;
+        }
+
+        .fa-kpi-value {
+            color: var(--fa-value) !important;
+            font-size: clamp(1.26rem,1.52vw,1.62rem) !important;
+            line-height: 1 !important;
+            font-weight: 950 !important;
+            letter-spacing: -.025em !important;
+        }
+
+        .fa-kpi-footer {
+            min-height: 25px;
+            border: 1px solid #274B6B;
+            border-radius: 9px;
+            padding: 4px 7px;
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            color: #D8E5F1 !important;
+            font-size: .64rem !important;
+            line-height: 1.15 !important;
+            font-weight: 760 !important;
+        }
+
+        .fa-kpi-card.sales {
+            --fa-accent:#22D3EE;
+            --fa-value:#53DDF8;
+        }
+
+        .fa-kpi-card.inventory {
+            --fa-accent:#A56CF5;
+            --fa-value:#B174FF;
+        }
+
+        .fa-kpi-card.leader {
+            --fa-accent:#F3C64E;
+            --fa-value:#F3C64E;
+        }
+
+        .fa-kpi-card.profit {
+            --fa-accent:#28D7A1;
+            --fa-value:#35E4B0;
+        }
+
+        .fa-kpi-card.stockvalue {
+            --fa-accent:#3DA8FF;
+            --fa-value:#55B8FF;
+        }
+
+        .fa-kpi-card.lostsales {
+            --fa-accent:#FF596B;
+            --fa-value:#FF6C7A;
+        }
+
+        .fa-leader-main {
+            flex: 1;
+            min-height: 47px;
+        }
+
+        .fa-leader-name {
+            color: #F4F7FB !important;
+            font-size: .72rem !important;
+            line-height: 1.15 !important;
+            font-weight: 900 !important;
+            margin-bottom: 3px !important;
+        }
+
+        .fa-leader-code {
+            color: #AFC6DC !important;
+            font-size: .62rem !important;
+            font-weight: 740 !important;
+            margin-bottom: 3px !important;
+        }
+
+        .fa-leader-value {
+            color: #F3C64E !important;
+            font-size: 1.18rem !important;
+            font-weight: 950 !important;
+            line-height: 1 !important;
+        }
+
+        @media (max-width: 1350px) {
+            .fa-kpi-title {
+                font-size: .64rem !important;
+            }
+
+            .fa-kpi-footer {
+                font-size: .59rem !important;
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        "<div style='height:12px'></div>",
+        unsafe_allow_html=True,
+    )
+
+    fa1, fa2, fa3 = st.columns(
+        3,
+        gap="small",
+    )
+
+    with fa1:
+        st.markdown(
+            (
+                '<div class="fa-kpi-card sales" '
+                'style="--fa-accent:#22D3EE;--fa-value:#53DDF8;">'
+                '<div class="fa-kpi-head">'
+                '<div class="fa-kpi-icon">💵</div>'
+                '<div class="fa-kpi-title">VENTA TOTAL POR FAMILIA</div>'
+                '</div>'
+                '<div class="fa-kpi-divider"></div>'
+                '<div class="fa-kpi-main">'
+                '<div class="fa-kpi-value">'
+                f'{money(family_kpi_sales)}'
+                '</div>'
+                '</div>'
+                '<div class="fa-kpi-footer">'
+                f'🏷️ {html.escape(family_kpi_label)}'
+                '</div>'
+                '</div>'
+            ),
+            unsafe_allow_html=True,
+        )
+
+    with fa2:
+        st.markdown(
+            (
+                '<div class="fa-kpi-card inventory" '
+                'style="--fa-accent:#A56CF5;--fa-value:#B174FF;">'
+                '<div class="fa-kpi-head">'
+                '<div class="fa-kpi-icon">📦</div>'
+                '<div class="fa-kpi-title">INVENTARIO TOTAL POR FAMILIA</div>'
+                '</div>'
+                '<div class="fa-kpi-divider"></div>'
+                '<div class="fa-kpi-main">'
+                '<div class="fa-kpi-value">'
+                f'{quantity(family_kpi_inventory, 0)}'
+                '</div>'
+                '</div>'
+                '<div class="fa-kpi-footer">'
+                f'◈ EMPAQ: {html.escape(family_kpi_pack)}'
+                '</div>'
+                '</div>'
+            ),
+            unsafe_allow_html=True,
+        )
+
+    with fa3:
+        st.markdown(
+            (
+                '<div class="fa-kpi-card leader" '
+                'style="--fa-accent:#F3C64E;--fa-value:#F3C64E;">'
+                '<div class="fa-kpi-head">'
+                '<div class="fa-kpi-icon">🏆</div>'
+                '<div class="fa-kpi-title">PRODUCTO CON MAYOR VENTA</div>'
+                '</div>'
+                '<div class="fa-kpi-divider"></div>'
+                '<div class="fa-leader-main">'
+                '<div class="fa-leader-name">'
+                f'{html.escape(family_kpi_top_name)}'
+                '</div>'
+                '<div class="fa-leader-code">Código: '
+                f'{html.escape(family_kpi_top_code)}</div>'
+                '<div class="fa-leader-value">'
+                f'{money(family_kpi_top_sales)}'
+                '</div>'
+                '</div>'
+                '<div class="fa-kpi-footer">'
+                f'▧ Inventario: {quantity(family_kpi_top_inventory, 0)}'
+                f' | EMPAQ: {html.escape(family_kpi_top_pack)}'
+                '</div>'
+                '</div>'
+            ),
+            unsafe_allow_html=True,
+        )
+
+    st.markdown(
+        "<div style='height:10px'></div>",
+        unsafe_allow_html=True,
+    )
+
+    fa4, fa5, fa6 = st.columns(
+        3,
+        gap="small",
+    )
+
+    with fa4:
+        st.markdown(
+            (
+                '<div class="fa-kpi-card profit" '
+                'style="--fa-accent:#28D7A1;--fa-value:#35E4B0;">'
+                '<div class="fa-kpi-head">'
+                '<div class="fa-kpi-icon">📈</div>'
+                '<div class="fa-kpi-title">'
+                'UTILIDAD BRUTA DE LA FAMILIA'
+                '</div>'
+                '</div>'
+                '<div class="fa-kpi-divider"></div>'
+                '<div class="fa-kpi-main">'
+                '<div class="fa-kpi-value">'
+                f'{money(family_kpi_profit)}'
+                '</div>'
+                '</div>'
+                '<div class="fa-kpi-footer">'
+                f'🏷️ {html.escape(family_kpi_label)}'
+                '</div>'
+                '</div>'
+            ),
+            unsafe_allow_html=True,
+        )
+
+    with fa5:
+        st.markdown(
+            (
+                '<div class="fa-kpi-card stockvalue" '
+                'style="--fa-accent:#3DA8FF;--fa-value:#55B8FF;">'
+                '<div class="fa-kpi-head">'
+                '<div class="fa-kpi-icon">💰</div>'
+                '<div class="fa-kpi-title">'
+                'VALOR DEL INVENTARIO DE LA FAMILIA'
+                '</div>'
+                '</div>'
+                '<div class="fa-kpi-divider"></div>'
+                '<div class="fa-kpi-main">'
+                '<div class="fa-kpi-value">'
+                f'{money(family_kpi_inventory_value)}'
+                '</div>'
+                '</div>'
+                '<div class="fa-kpi-footer">'
+                '◈ INVENTARIO × COSTO ACTUAL'
+                '</div>'
+                '</div>'
+            ),
+            unsafe_allow_html=True,
+        )
+
+    with fa6:
+        st.markdown(
+            (
+                '<div class="fa-kpi-card lostsales" '
+                'style="--fa-accent:#FF596B;--fa-value:#FF6C7A;">'
+                '<div class="fa-kpi-head">'
+                '<div class="fa-kpi-icon">⚠️</div>'
+                '<div class="fa-kpi-title">'
+                'VENTAS PERDIDAS DE LA FAMILIA'
+                '</div>'
+                '</div>'
+                '<div class="fa-kpi-divider"></div>'
+                '<div class="fa-kpi-main">'
+                '<div class="fa-kpi-value">'
+                f'{quantity(family_kpi_lost_sales, 0)}'
+                '</div>'
+                '</div>'
+                '<div class="fa-kpi-footer">'
+                '▧ UNIDADES PERDIDAS'
+                '</div>'
+                '</div>'
+            ),
+            unsafe_allow_html=True,
+        )
+
+    st.markdown(
+        "<div style='height:20px'></div>",
+        unsafe_allow_html=True,
+    )
+
+
+    st.markdown("### 💰 Ventas mes actual por familia")
+    if top_choice == "TODOS":
+        st.caption(
+            f"Mostrando las {family_visual_limit} familias con mayores ventas "
+            f"de {family_total_count:,} familias disponibles. "
+            "TODOS conserva el conjunto completo para análisis y tablas. "
+            "Haz clic sobre una barra para analizar esa familia."
+        )
+    else:
+        st.caption(
+            f"Se muestran las {family_visual_limit} familias con mayores ventas "
+            f"de {family_total_count:,} familias disponibles. "
+            "Haz clic sobre una barra para analizar esa familia en las demás "
+            "gráficas y tablas de esta pestaña."
+        )
+
+
     selector_fig = px.bar(
         family_sales_selector,
         x="FAMILIA_COMPLETA",
@@ -4467,19 +5251,21 @@ with tab_familia:
         ),
     )
 
+    selector_title_html = (
+        "<b><span style='font-size:28px;color:#00E5FF;'>"
+        "VENTAS MES ACTUAL"
+        "</span></b>"
+        "<br>"
+        "<span style='font-size:22px;color:#FFFFFF;'>"
+        + family_main_title
+        + "</span>"
+    )
+
     selector_fig.update_layout(
         height=570,
         bargap=0.30,
         title=dict(
-            text=(
-                "<b><span style='font-size:28px;color:#00E5FF;'>"
-                "VENTAS MES ACTUAL"
-                "</span></b>"
-                "<br>"
-                "<span style='font-size:22px;color:#FFFFFF;'>"
-                "TOP 20 FAMILIAS"
-                "</span>"
-            ),
+            text=selector_title_html,
             x=0.5,
             xanchor="center",
             y=0.93,
@@ -4599,7 +5385,10 @@ with tab_familia:
             selected_points = []
 
     if selected_points:
-        point = selected_points[0]
+        # Plotly puede conservar la selección anterior y devolver
+        # más de un punto. El último elemento corresponde al clic
+        # más reciente y debe reemplazar la familia anterior.
+        point = selected_points[-1]
 
         try:
             custom_data = point.get(
@@ -4628,13 +5417,25 @@ with tab_familia:
             and clicked_family
             in available_family_names
         ):
+            previous_family = st.session_state.get(
+                "selected_family_from_chart"
+            )
+
             st.session_state[
                 "selected_family_from_chart"
             ] = clicked_family
 
-            selected_family = (
-                clicked_family
-            )
+            selected_family = clicked_family
+
+            # Si el usuario pulsa otra barra, recreamos solamente
+            # este componente con un key nuevo. Esto borra la
+            # selección visual anterior y evita tener que hacer
+            # un segundo clic.
+            if clicked_family != previous_family:
+                st.session_state[
+                    "family_selection_reset_token"
+                ] += 1
+                st.rerun()
 
     # Controles de selección
     selection_col1, selection_col2 = (
@@ -4665,26 +5466,6 @@ with tab_familia:
                 use_container_width=True,
                 on_click=clear_family_selection,
             )
-
-    # Base de datos que alimentará las demás visualizaciones.
-    if selected_family:
-        family_focus_df = (
-            filtered_df[
-                filtered_df["FAMILIA"]
-                .astype("string")
-                .fillna("SIN FAMILIA")
-                .astype(str)
-                .eq(
-                    selected_family
-                )
-            ]
-            .copy()
-        )
-    else:
-        family_focus_df = (
-            filtered_df.copy()
-        )
-
 
     # ========================================================
     # VENTAS Y UTILIDAD POR FAMILIA
@@ -4746,15 +5527,7 @@ with tab_familia:
                 "TOTAL_COMPARACION",
                 ascending=False,
             )
-            .head(
-                max(
-                    8,
-                    min(
-                        top_n,
-                        15,
-                    ),
-                )
-            )
+            .head(top_n)
         )
 
         comparison_products[
@@ -4793,7 +5566,6 @@ with tab_familia:
             y="VENTAS",
             color="PERIODO",
             barmode="group",
-        barnorm="",
             title=(
                 "Comparativo por producto"
             ),
@@ -4855,7 +5627,7 @@ with tab_familia:
                 "#VENTAS MES ACTUAL",
                 ascending=False,
             )
-            .head(20)
+            .head(family_visual_limit)
         )
 
         comparison[
@@ -4894,8 +5666,15 @@ with tab_familia:
             ],
             barmode="group",
             title=(
-                "Comparativo de ventas "
-                "— Top 20 familias"
+                (
+                    f"Comparativo de ventas — Top {family_visual_limit} "
+                    f"de {family_total_count:,} familias"
+                )
+                if top_choice == "TODOS"
+                else (
+                    f"Comparativo de ventas — "
+                    f"Top {family_visual_limit} familias"
+                )
             ),
             labels={
                 "FAMILIA_CORTA":
@@ -4969,15 +5748,7 @@ with tab_familia:
                 "$VENTAS MES ACTUAL",
                 ascending=False,
             )
-            .head(
-                max(
-                    10,
-                    min(
-                        top_n,
-                        20,
-                    ),
-                )
-            )
+            .head(top_n)
         )
 
         total_product_sales[
@@ -5061,7 +5832,7 @@ with tab_familia:
             "### 📊 Ventas totales por familia"
         )
 
-        total_by_family = (
+        total_by_family_all = (
             family_focus_df
             .groupby(
                 "FAMILIA",
@@ -5073,17 +5844,68 @@ with tab_familia:
                 "$VENTAS MES ACTUAL",
                 ascending=False,
             )
-            .head(15)
+            .reset_index(drop=True)
         )
+
+        if top_choice == "TODOS":
+            pie_top_limit = min(
+                10,
+                len(total_by_family_all),
+            )
+
+            total_by_family = (
+                total_by_family_all
+                .head(pie_top_limit)
+                .copy()
+            )
+
+            other_sales = float(
+                total_by_family_all
+                .iloc[pie_top_limit:][
+                    "$VENTAS MES ACTUAL"
+                ]
+                .sum()
+            )
+
+            if other_sales != 0:
+                total_by_family = pd.concat(
+                    [
+                        total_by_family,
+                        pd.DataFrame(
+                            {
+                                "FAMILIA": [
+                                    "OTRAS FAMILIAS"
+                                ],
+                                "$VENTAS MES ACTUAL": [
+                                    other_sales
+                                ],
+                            }
+                        ),
+                    ],
+                    ignore_index=True,
+                )
+
+            pie_title = (
+                f"Participación de ventas — "
+                f"Top {pie_top_limit} + OTRAS FAMILIAS"
+            )
+        else:
+            total_by_family = (
+                total_by_family_all
+                .head(family_visual_limit)
+                .copy()
+            )
+
+            pie_title = (
+                f"Participación de ventas — "
+                f"Top {family_visual_limit} familias"
+            )
 
         fig = px.pie(
             total_by_family,
             names="FAMILIA",
             values="$VENTAS MES ACTUAL",
-            title=(
-                "Participación de ventas "
-                "— Top 15 familias"
-            ),
+            title=pie_title,
             hole=0.45,
             color_discrete_sequence=
                 EXECUTIVE_COLORS,
@@ -5155,13 +5977,27 @@ with tab_familia:
             f"{selected_family}"
         )
     else:
-        summary_family_focus = (
-            family_df.copy()
-        )
+        if top_choice == "TODOS":
+            summary_family_focus = (
+                family_df
+                .copy()
+            )
 
-        table_title = (
-            "📋 Resumen por familia"
-        )
+            table_title = (
+                f"📋 Resumen por familia — "
+                f"TODAS ({family_total_count:,})"
+            )
+        else:
+            summary_family_focus = (
+                family_df
+                .copy()
+                .head(family_visual_limit)
+            )
+
+            table_title = (
+                f"📋 Resumen por familia — "
+                f"TOP {family_visual_limit}"
+            )
 
     with st.expander(
         f"{table_title}  ·  Mostrar / ocultar",
@@ -5232,129 +6068,6 @@ with tab_productos:
 
 
     # ========================================================
-    # TOP PRODUCTOS
-    # ========================================================
-
-    st.markdown("---")
-    st.markdown(
-        f"### 🏅 Top {top_n} productos "
-        "por ventas del mes actual"
-    )
-
-    top_products = (
-        product_sales
-        .head(top_n)
-        .copy()
-    )
-
-    top_products["PRODUCTO"] = (
-        top_products["#COD."]
-        .astype(str)
-        + " - "
-        + top_products["DESCRIPCION"]
-        .astype(str)
-    )
-
-    top_products["VENTA_LABEL"] = (
-        top_products["$VENTAS MES ACTUAL"]
-        .apply(money)
-    )
-
-    product_top_colors = [
-        "#2ED3B7",
-        "#D7AE58",
-        "#4FC3F7",
-        "#8FB1D0",
-        "#B68AE6",
-        "#FF8A72",
-        "#57D4C3",
-        "#E6A85C",
-        "#8EB6DB",
-        "#93C9A5",
-        "#FF6F91",
-        "#7FD3FF",
-    ]
-
-    fig = px.bar(
-        top_products.sort_values(
-            "$VENTAS MES ACTUAL",
-            ascending=False,
-        ),
-        x="PRODUCTO",
-        y="$VENTAS MES ACTUAL",
-        labels={
-            "$VENTAS MES ACTUAL": "Ventas ($)",
-            "PRODUCTO": "Producto",
-        },
-        text="VENTA_LABEL",
-        color="PRODUCTO",
-        color_discrete_sequence=product_top_colors,
-    )
-
-    fig.update_traces(
-        textposition="outside",
-        textfont=dict(
-            size=12,
-            color="#EAF3FA",
-            family=(
-                "Inter, Segoe UI, Arial, sans-serif"
-            ),
-        ),
-        cliponaxis=False,
-        hovertemplate=(
-            "<b>%{x}</b><br>"
-            "Ventas: %{text}<extra></extra>"
-        ),
-        marker_line_color="rgba(255,255,255,.16)",
-        marker_line_width=1.0,
-    )
-
-    fig.update_layout(
-        title=dict(
-            text=(
-                "$ VENTAS MES ACTUAL"
-                "<br>"
-                "<span style='font-size:18px;"
-                "font-weight:700;"
-                "letter-spacing:0.06em;"
-                "color:#D9B85C;'>"
-                "TOP 10 PRODUCTOS"
-                "</span>"
-            ),
-            x=0.5,
-            xanchor="center",
-            y=0.96,
-            yanchor="top",
-            font=dict(
-                size=28,
-                color="#FFFFFF",
-                family=(
-                    "Aptos Display, Inter, "
-                    "Segoe UI, Arial, sans-serif"
-                ),
-            ),
-        ),
-        height=600,
-        showlegend=False,
-        xaxis_tickangle=-42,
-        margin=dict(
-            l=28,
-            r=24,
-            t=110,
-            b=165,
-        ),
-    )
-
-    apply_executive_bar_style(fig)
-
-    st.plotly_chart(
-        fig,
-        use_container_width=True,
-    )
-
-
-
-    # ========================================================
     # VENTAS POR PRODUCTO DENTRO DE UNA FAMILIA
     # ========================================================
 
@@ -5399,36 +6112,45 @@ with tab_productos:
             "### 🧩 Ventas por producto dentro de una familia"
         )
 
-        if "treemap_selection_reset_token" not in st.session_state:
-            st.session_state["treemap_selection_reset_token"] = 0
+        if "treemap_click_reset_token" not in st.session_state:
+            st.session_state["treemap_click_reset_token"] = 0
 
         def clear_family_product_filter() -> None:
             """
-            Limpia todos los filtros del análisis de productos:
-            familia del selector, producto elegido en el treemap
-            y filtro lateral por producto.
+            Mantiene la familia elegida y limpia únicamente los
+            productos seleccionados. TOP vuelve a TODOS, que en esta
+            sección significa TODOS LOS PRODUCTOS DE LA FAMILIA ACTUAL.
             """
-            st.session_state[
-                "family_product_chart"
-            ] = default_chart_family
+            current_family = st.session_state.get(
+                "family_product_chart",
+                default_chart_family,
+            )
 
             st.session_state[
                 "selected_product_from_treemap"
             ] = None
 
             st.session_state[
+                "selected_products_from_treemap"
+            ] = []
+
+            st.session_state[
                 "selected_product_family"
-            ] = default_chart_family
+            ] = current_family
 
             st.session_state[
                 "sidebar_product_filter"
             ] = []
 
             st.session_state[
-                "treemap_selection_reset_token"
+                "global_top_n"
+            ] = "TODOS"
+
+            st.session_state[
+                "treemap_click_reset_token"
             ] = (
                 st.session_state.get(
-                    "treemap_selection_reset_token",
+                    "treemap_click_reset_token",
                     0,
                 )
                 + 1
@@ -5482,13 +6204,16 @@ with tab_productos:
                 "selected_product_from_treemap"
             ] = None
             st.session_state[
+                "selected_products_from_treemap"
+            ] = []
+            st.session_state[
                 "selected_product_family"
             ] = chart_family
             st.session_state[
-                "treemap_selection_reset_token"
+                "treemap_click_reset_token"
             ] = (
                 st.session_state.get(
-                    "treemap_selection_reset_token",
+                    "treemap_click_reset_token",
                     0,
                 )
                 + 1
@@ -5516,6 +6241,36 @@ with tab_productos:
         kpi_family_inventory = safe_sum(
             selected_family_kpi_df[
                 "INVENTARIO TOTAL"
+            ]
+        )
+
+        # Nuevos KPI interactivos por familia.
+        kpi_family_gross_profit = safe_sum(
+            selected_family_kpi_df[
+                "$UTILIDAD MES ACTUAL"
+            ]
+        )
+
+        kpi_family_inventory_value = float(
+            (
+                pd.to_numeric(
+                    selected_family_kpi_df[
+                        "INVENTARIO TOTAL"
+                    ],
+                    errors="coerce",
+                ).fillna(0.0)
+                * pd.to_numeric(
+                    selected_family_kpi_df[
+                        "COSTO ACTUAL"
+                    ],
+                    errors="coerce",
+                ).fillna(0.0)
+            ).sum()
+        )
+
+        kpi_family_lost_sales = safe_sum(
+            selected_family_kpi_df[
+                "#VENTAS PERDIDAS"
             ]
         )
 
@@ -5685,6 +6440,24 @@ with tab_productos:
                 --pa-accent: #E2B84E;
                 --pa-glow: rgba(226, 184, 78, .48);
                 --pa-value: #F2CF69;
+            }
+
+            .pa-kpi-card.profit {
+                --pa-accent: #35D0A1;
+                --pa-glow: rgba(53, 208, 161, .46);
+                --pa-value: #68E3BB;
+            }
+
+            .pa-kpi-card.stockvalue {
+                --pa-accent: #4FA8FF;
+                --pa-glow: rgba(79, 168, 255, .46);
+                --pa-value: #79BEFF;
+            }
+
+            .pa-kpi-card.lostsales {
+                --pa-accent: #FF6F7D;
+                --pa-glow: rgba(255, 111, 125, .43);
+                --pa-value: #FF8D98;
             }
 
             .pa-kpi-head {
@@ -5970,22 +6743,298 @@ with tab_productos:
                 unsafe_allow_html=True,
             )
 
+        # ----------------------------------------------------
+        # SEGUNDA FILA KPI — RENTABILIDAD, VALOR Y PÉRDIDAS
+        # ----------------------------------------------------
+        st.markdown(
+            "<div style='height:12px'></div>",
+            unsafe_allow_html=True,
+        )
+
+        spacer2_left, pk4, pk5, pk6, spacer2_right = st.columns(
+            [0.42, 1.0, 1.0, 1.15, 0.42],
+            gap="small",
+        )
+
+        with pk4:
+            st.markdown(
+                (
+                    '<div class="pa-kpi-card profit">'
+                    '<div class="pa-kpi-head">'
+                    '<div class="pa-kpi-icon">📈</div>'
+                    '<div class="pa-kpi-title">'
+                    'UTILIDAD BRUTA DE LA FAMILIA'
+                    '</div>'
+                    '</div>'
+                    '<div class="pa-kpi-divider"></div>'
+                    '<div class="pa-kpi-main">'
+                    '<div class="pa-kpi-value">'
+                    f'{money(kpi_family_gross_profit)}'
+                    '</div>'
+                    '</div>'
+                    '<div class="pa-kpi-footer">'
+                    '<span class="pa-kpi-footer-icon">🏷️</span>'
+                    f'<span>{html.escape(str(chart_family))}</span>'
+                    '</div>'
+                    '</div>'
+                ),
+                unsafe_allow_html=True,
+            )
+
+        with pk5:
+            st.markdown(
+                (
+                    '<div class="pa-kpi-card stockvalue">'
+                    '<div class="pa-kpi-head">'
+                    '<div class="pa-kpi-icon">💰</div>'
+                    '<div class="pa-kpi-title">'
+                    'VALOR DEL INVENTARIO DE LA FAMILIA'
+                    '</div>'
+                    '</div>'
+                    '<div class="pa-kpi-divider"></div>'
+                    '<div class="pa-kpi-main">'
+                    '<div class="pa-kpi-value">'
+                    f'{money(kpi_family_inventory_value)}'
+                    '</div>'
+                    '</div>'
+                    '<div class="pa-kpi-footer">'
+                    '<span class="pa-kpi-footer-icon">◈</span>'
+                    '<span>INVENTARIO × COSTO ACTUAL</span>'
+                    '</div>'
+                    '</div>'
+                ),
+                unsafe_allow_html=True,
+            )
+
+        with pk6:
+            st.markdown(
+                (
+                    '<div class="pa-kpi-card lostsales">'
+                    '<div class="pa-kpi-head">'
+                    '<div class="pa-kpi-icon">⚠️</div>'
+                    '<div class="pa-kpi-title">'
+                    'VENTAS PERDIDAS DE LA FAMILIA'
+                    '</div>'
+                    '</div>'
+                    '<div class="pa-kpi-divider"></div>'
+                    '<div class="pa-kpi-main">'
+                    '<div class="pa-kpi-value">'
+                    f'{quantity(kpi_family_lost_sales, 0)}'
+                    '</div>'
+                    '</div>'
+                    '<div class="pa-kpi-footer">'
+                    '<span class="pa-kpi-footer-icon">▧</span>'
+                    '<span>UNIDADES PERDIDAS</span>'
+                    '</div>'
+                    '</div>'
+                ),
+                unsafe_allow_html=True,
+            )
+
         # Separación visual adicional entre los KPI y el treemap.
         st.markdown(
             "<div style='height:32px'></div>",
             unsafe_allow_html=True,
         )
 
-        family_products = (
-            filtered_df[
-                (
-                    filtered_df["FAMILIA"]
-                    .astype(str)
-                    .eq(chart_family)
+
+    # ========================================================
+    # SCOPE DE PRODUCTOS DE LA FAMILIA ACTUAL
+    # ========================================================
+    # IMPORTANTE: en Análisis de productos, TODOS significa
+    # todos los productos de chart_family, nunca todo filtered_df.
+    family_product_scope_df = (
+        filtered_df[
+            (
+                filtered_df["FAMILIA"]
+                .astype(str)
+                .eq(str(chart_family))
+            )
+            &
+            (
+                ~filtered_df["DESCRIPCION"]
+                .fillna("")
+                .astype(str)
+                .str.strip()
+                .str.upper()
+                .str.startswith(
+                    "AJUSTE",
+                    na=False,
                 )
-                &
+            )
+        ]
+        .groupby(
+            ["#COD.", "DESCRIPCION"],
+            dropna=False,
+            as_index=False,
+        )["$VENTAS MES ACTUAL"]
+        .sum()
+        .sort_values(
+            "$VENTAS MES ACTUAL",
+            ascending=False,
+        )
+        .reset_index(drop=True)
+    )
+
+    family_product_count = len(
+        family_product_scope_df
+    )
+
+    family_top_n = (
+        min(
+            50,
+            max(family_product_count, 1),
+        )
+        if top_choice == "TODOS"
+        else min(
+            int(top_choice),
+            max(family_product_count, 1),
+        )
+    )
+
+    family_top_label = (
+        (
+            f"{family_top_n} DE "
+            f"{family_product_count}"
+        )
+        if top_choice == "TODOS"
+        and family_product_count > family_top_n
+        else (
+            "TODOS"
+            if top_choice == "TODOS"
+            else str(top_choice)
+        )
+    )
+
+    # ========================================================
+    # TOP PRODUCTOS
+    # ========================================================
+
+    st.markdown("---")
+    st.markdown(
+        f"### 🏅 Top {family_top_label} productos "
+        "por ventas del mes actual"
+    )
+
+    top_products = (
+        family_product_scope_df
+        .head(family_top_n)
+        .copy()
+    )
+
+    top_products["PRODUCTO"] = (
+        top_products["#COD."]
+        .astype(str)
+        + " - "
+        + top_products["DESCRIPCION"]
+        .astype(str)
+    )
+
+    top_products["VENTA_LABEL"] = (
+        top_products["$VENTAS MES ACTUAL"]
+        .apply(money)
+    )
+
+    product_top_colors = [
+        "#2ED3B7",
+        "#D7AE58",
+        "#4FC3F7",
+        "#8FB1D0",
+        "#B68AE6",
+        "#FF8A72",
+        "#57D4C3",
+        "#E6A85C",
+        "#8EB6DB",
+        "#93C9A5",
+        "#FF6F91",
+        "#7FD3FF",
+    ]
+
+    fig = px.bar(
+        top_products.sort_values(
+            "$VENTAS MES ACTUAL",
+            ascending=False,
+        ),
+        x="PRODUCTO",
+        y="$VENTAS MES ACTUAL",
+        labels={
+            "$VENTAS MES ACTUAL": "Ventas ($)",
+            "PRODUCTO": "Producto",
+        },
+        text="VENTA_LABEL",
+        color="PRODUCTO",
+        color_discrete_sequence=product_top_colors,
+    )
+
+    fig.update_traces(
+        textposition="outside",
+        textfont=dict(
+            size=12,
+            color="#EAF3FA",
+            family=(
+                "Inter, Segoe UI, Arial, sans-serif"
+            ),
+        ),
+        cliponaxis=False,
+        hovertemplate=(
+            "<b>%{x}</b><br>"
+            "Ventas: %{text}<extra></extra>"
+        ),
+        marker_line_color="rgba(255,255,255,.16)",
+        marker_line_width=1.0,
+    )
+
+    fig.update_layout(
+        title=dict(
+            text=(
+                "$ VENTAS MES ACTUAL"
+                "<br>"
+                "<span style='font-size:18px;"
+                "font-weight:700;"
+                "letter-spacing:0.06em;"
+                "color:#D9B85C;'>"
+                f"TOP {family_top_label} PRODUCTOS"
+                "</span>"
+            ),
+            x=0.5,
+            xanchor="center",
+            y=0.96,
+            yanchor="top",
+            font=dict(
+                size=28,
+                color="#FFFFFF",
+                family=(
+                    "Aptos Display, Inter, "
+                    "Segoe UI, Arial, sans-serif"
+                ),
+            ),
+        ),
+        height=600,
+        showlegend=False,
+        xaxis_tickangle=-42,
+        margin=dict(
+            l=28,
+            r=24,
+            t=110,
+            b=165,
+        ),
+    )
+
+    apply_executive_bar_style(fig)
+
+    st.plotly_chart(
+        fig,
+        use_container_width=True,
+    )
+
+
+
+    if families_for_chart:
+
+        family_products = (
+            selected_family_kpi_df[
                 (
-                    ~filtered_df["DESCRIPCION"]
+                    ~selected_family_kpi_df["DESCRIPCION"]
                     .fillna("")
                     .astype(str)
                     .str.strip()
@@ -6028,6 +7077,8 @@ with tab_productos:
                 "$VENTAS MES ACTUAL",
                 ascending=False,
             )
+            .head(family_top_n)
+            .reset_index(drop=True)
         )
 
         family_products["PRODUCTO"] = (
@@ -6118,6 +7169,89 @@ with tab_productos:
             family_products["$VENTAS MES ACTUAL"]
             .apply(lambda value: f"${float(value):,.2f}")
         )
+
+        # Plotly Treemap no dibuja categorías con venta 0 porque
+        # no tienen área. La regla visual será:
+        # - Si VENTAS > 0: el tamaño usa la venta real.
+        # - Si VENTAS <= 0 pero INVENTARIO > 0: el producto permanece
+        #   visible usando un tamaño visual mínimo basado en inventario.
+        # - Los valores reales de venta e inventario NO se alteran.
+        positive_sales_for_size = (
+            family_products["$VENTAS MES ACTUAL"]
+            .astype(float)
+            .clip(lower=0)
+        )
+
+        inventory_for_size = (
+            family_products["INVENTARIO TOTAL"]
+            .astype(float)
+            .clip(lower=0)
+        )
+
+        positive_total_for_size = float(
+            positive_sales_for_size.sum()
+        )
+
+        visual_floor = (
+            max(
+                positive_total_for_size * 0.0025,
+                0.01,
+            )
+            if positive_total_for_size > 0
+            else 1.0
+        )
+
+        max_inventory_for_size = float(
+            inventory_for_size.max()
+        ) if len(inventory_for_size) else 0.0
+
+        if max_inventory_for_size > 0:
+            inventory_visual_factor = (
+                inventory_for_size
+                / max_inventory_for_size
+            )
+        else:
+            inventory_visual_factor = (
+                inventory_for_size * 0
+            )
+
+        # Para ventas 0 con inventario positivo, asignamos entre
+        # 1x y 3x el piso visual según su inventario relativo.
+        inventory_visual_size = (
+            visual_floor
+            * (
+                1.0
+                + 2.0 * inventory_visual_factor
+            )
+        )
+
+        family_products["TREEMAP_SIZE"] = (
+            positive_sales_for_size.copy()
+        )
+
+        zero_sales_with_inventory = (
+            (positive_sales_for_size <= 0)
+            & (inventory_for_size > 0)
+        )
+
+        family_products.loc[
+            zero_sales_with_inventory,
+            "TREEMAP_SIZE",
+        ] = inventory_visual_size.loc[
+            zero_sales_with_inventory
+        ]
+
+        # Si tanto ventas como inventario son 0, se deja un área mínima
+        # para mantener consistencia con el TOP visible seleccionado.
+        zero_sales_zero_inventory = (
+            (positive_sales_for_size <= 0)
+            & (inventory_for_size <= 0)
+        )
+
+        family_products.loc[
+            zero_sales_zero_inventory,
+            "TREEMAP_SIZE",
+        ] = visual_floor * 0.35
 
         positive_sales_total = float(
             family_products[
@@ -6249,10 +7383,10 @@ with tab_productos:
         fig = px.treemap(
             family_products,
             path=["PRODUCTO"],
-            values="$VENTAS MES ACTUAL",
+            values="TREEMAP_SIZE",
             title=(
-                "Distribución de ventas por producto — "
-                f"{chart_family}"
+                f"Distribución de ventas por producto — "
+                f"TOP {top_label} — {chart_family}"
             ),
             color="PRODUCTO",
             color_discrete_map=treemap_color_map,
@@ -6306,7 +7440,7 @@ with tab_productos:
         )
 
         fig.update_layout(
-            height=550,
+            height=500,
             autosize=True,
             template="plotly_dark",
             paper_bgcolor="#091625",
@@ -6323,7 +7457,8 @@ with tab_productos:
                     "<br>"
                     f"<span style='font-size:14px;"
                     "color:#D7AE58;'>"
-                    f"{chart_family}"
+                    f"{chart_family} · "
+                    f"{len(family_products)} productos"
                     "</span>"
                 ),
                 x=0.5,
@@ -6360,127 +7495,198 @@ with tab_productos:
         )
 
         # ----------------------------------------------------
-        # CLIC REAL SOBRE EL TREEMAP
+        # TREEMAP — INTERACCIÓN NATIVA DE STREAMLIT
         # ----------------------------------------------------
-        # st.plotly_chart(on_select=...) no devuelve el clic
-        # de un treemap de forma confiable. Para este gráfico
-        # se captura directamente el evento plotly_click.
-        if plotly_events is None:
-            st.error(
-                "Falta instalar 'streamlit-plotly-events'. "
-                "Ejecute: pip install streamlit-plotly-events"
+        # Se elimina streamlit-plotly-events. El componente nativo
+        # evita bloquear el rerun completo del dashboard.
+        fig.update_layout(
+            clickmode="event+select",
+        )
+
+        treemap_event = st.plotly_chart(
+            fig,
+            use_container_width=True,
+            key=(
+                "family_product_treemap_native_"
+                f"{chart_family}_"
+                f"{st.session_state.get('treemap_click_reset_token', 0)}"
+            ),
+            config={
+                "displaylogo": False,
+                "responsive": True,
+            },
+            on_select="rerun",
+            selection_mode="points",
+        )
+
+        selected_points = []
+
+        try:
+            selected_points = list(
+                treemap_event.selection.points
             )
+        except Exception:
+            try:
+                selected_points = list(
+                    treemap_event
+                    .get("selection", {})
+                    .get("points", [])
+                )
+            except Exception:
+                selected_points = []
 
-            st.plotly_chart(
-                fig,
-                use_container_width=True,
-                key="family_product_treemap_fallback",
-            )
+        clicked_products = []
 
-        else:
-            clicked_treemap_points = plotly_events(
-                fig,
-                click_event=True,
-                select_event=False,
-                hover_event=False,
-                override_height=550,
-                override_width="100%",
-                key=(
-                    "family_product_treemap_click_"
-                    f"{st.session_state.get('treemap_selection_reset_token', 0)}"
-                ),
-            )
+        for selected_point in selected_points:
+            product_name = None
 
-            clicked_product = None
-
-            if clicked_treemap_points:
-                clicked_point = clicked_treemap_points[0]
-
-                point_number = (
-                    clicked_point.get("pointNumber")
-                    if isinstance(clicked_point, dict)
-                    else None
+            if isinstance(selected_point, dict):
+                customdata = selected_point.get(
+                    "customdata"
                 )
 
-                if point_number is None and isinstance(
-                    clicked_point,
-                    dict,
-                ):
-                    point_number = clicked_point.get(
-                        "pointIndex"
+                if isinstance(
+                    customdata,
+                    (list, tuple),
+                ) and customdata:
+                    product_name = str(
+                        customdata[0]
+                    ).strip()
+
+                if not product_name:
+                    raw_label = selected_point.get(
+                        "label"
                     )
 
-                try:
-                    point_number = int(point_number)
-                except (
-                    TypeError,
-                    ValueError,
-                ):
-                    point_number = None
+                    if raw_label is not None:
+                        product_name = str(
+                            raw_label
+                        ).strip()
 
-                if point_number is not None:
-                    treemap_labels = list(
-                        fig.data[0].labels
+                if not product_name:
+                    point_index = selected_point.get(
+                        "pointIndex",
+                        selected_point.get(
+                            "pointNumber"
+                        ),
                     )
 
-                    if (
-                        0
-                        <= point_number
-                        < len(treemap_labels)
-                    ):
-                        clicked_product = str(
-                            treemap_labels[
-                                point_number
-                            ]
+                    try:
+                        point_index = int(
+                            point_index
                         )
+                    except (TypeError, ValueError):
+                        point_index = None
+
+                    if point_index is not None:
+                        if (
+                            0 <= point_index
+                            < len(family_products)
+                        ):
+                            product_name = str(
+                                family_products.iloc[
+                                    point_index
+                                ]["PRODUCTO"]
+                            ).strip()
 
             if (
-                clicked_product
-                and clicked_product
-                != st.session_state.get(
-                    "selected_product_from_treemap"
+                product_name
+                and product_name
+                in set(
+                    family_products[
+                        "PRODUCTO"
+                    ]
+                    .astype(str)
+                    .tolist()
                 )
+                and product_name
+                not in clicked_products
             ):
-                st.session_state[
-                    "selected_product_from_treemap"
-                ] = clicked_product
+                clicked_products.append(
+                    product_name
+                )
 
-                st.session_state[
-                    "selected_product_family"
-                ] = chart_family
+        if clicked_products:
+            existing_products = list(
+                st.session_state.get(
+                    "selected_products_from_treemap",
+                    [],
+                )
+            )
 
-                # Evitamos una segunda recarga completa del dashboard.
+            # Cada nuevo clic se agrega a la selección existente.
+            # Así el usuario puede escoger más de un producto
+            # mediante clics sucesivos en el treemap.
+            for clicked_product in clicked_products:
+                if clicked_product not in existing_products:
+                    existing_products.append(
+                        clicked_product
+                    )
 
-        selected_product_badge = (
-            st.session_state.get(
+            # Solo conservar productos que pertenecen actualmente
+            # al treemap/familia visible.
+            valid_treemap_products = set(
+                family_products["PRODUCTO"]
+                .astype(str)
+                .tolist()
+            )
+
+            existing_products = [
+                product
+                for product in existing_products
+                if product in valid_treemap_products
+            ]
+
+            st.session_state[
+                "selected_products_from_treemap"
+            ] = existing_products
+
+            st.session_state[
                 "selected_product_from_treemap"
+            ] = (
+                existing_products[-1]
+                if existing_products
+                else None
+            )
+
+            st.session_state[
+                "selected_product_family"
+            ] = chart_family
+
+        selected_treemap_products_display = list(
+            st.session_state.get(
+                "selected_products_from_treemap",
+                [],
             )
         )
 
-        if selected_product_badge:
-            st.markdown(
-                (
-                    '<div style="'
-                    'margin-top:6px;'
-                    'padding:8px 12px;'
-                    'border-radius:9px;'
-                    'background:rgba(34,211,238,.09);'
-                    'border:1px solid rgba(34,211,238,.30);'
-                    'color:#DDF8FF;'
-                    'font-size:.80rem;'
-                    'font-weight:750;">'
-                    '🎯 Producto seleccionado: '
-                    f'{html.escape(str(selected_product_badge))}'
-                    '</div>'
-                ),
-                unsafe_allow_html=True,
+        # El cambio de familia invalida selecciones anteriores.
+        if (
+            st.session_state.get(
+                "selected_product_family"
             )
+            not in (None, chart_family)
+        ):
+            selected_treemap_products_display = []
+            st.session_state[
+                "selected_products_from_treemap"
+            ] = []
+            st.session_state[
+                "selected_product_from_treemap"
+            ] = None
+            st.session_state[
+                "selected_product_family"
+            ] = chart_family
 
-    else:
-        st.info(
-            "No se encontraron familias para graficar."
-        )
-
+        if selected_treemap_products_display:
+            st.caption(
+                "🎯 Productos seleccionados "
+                f"({len(selected_treemap_products_display)}): "
+                + " | ".join(
+                    selected_treemap_products_display
+                )
+                + " · Haz clic en otros recuadros para agregarlos."
+            )
 
     # ========================================================
     # PRODUCTOS DE LA FAMILIA SELECCIONADA
@@ -6527,7 +7733,7 @@ with tab_productos:
             "$VENTAS MES ACTUAL",
             ascending=False,
         )
-        .head(15)
+        .head(family_top_n)
         .reset_index(drop=True)
     )
 
@@ -6554,26 +7760,26 @@ with tab_productos:
         .astype(str)
     )
 
-    selected_treemap_product = (
+    selected_treemap_products = list(
         st.session_state.get(
-            "selected_product_from_treemap"
+            "selected_products_from_treemap",
+            [],
         )
     )
 
-    if selected_treemap_product:
+    if selected_treemap_products:
         selected_family_products_chart = (
             selected_family_products_chart[
-                selected_family_products_chart[
-                    "PRODUCTO"
-                ]
+                selected_family_products_chart["PRODUCTO"]
                 .astype(str)
-                .eq(
-                    str(selected_treemap_product)
-                )
+                .isin(selected_treemap_products)
             ]
             .copy()
             .reset_index(drop=True)
         )
+
+    # El filtrado de productos se controla desde el sidebar.
+    # Se elimina el estado oculto del antiguo clic del treemap.
 
     selected_family_products_chart[
         "VENTA_LABEL"
@@ -6612,7 +7818,7 @@ with tab_productos:
             "$VENTAS MES ACTUAL",
             ascending=False,
         )
-        .head(10)
+        .head(len(selected_family_products_chart) if selected_treemap_products else family_top_n)
         .copy()
         .reset_index(drop=True)
     )
@@ -6865,29 +8071,26 @@ with tab_productos:
         .astype(str)
     )
 
-    if selected_treemap_product:
+    if selected_treemap_products:
         comparison_products_df = (
             comparison_products_df[
-                comparison_products_df[
-                    "PRODUCTO"
-                ]
+                comparison_products_df["PRODUCTO"]
                 .astype(str)
-                .eq(
-                    str(selected_treemap_product)
-                )
+                .isin(selected_treemap_products)
             ]
             .copy()
             .reset_index(drop=True)
         )
 
     # Comparación producto por producto.
-    # Se muestran TODOS los productos de la familia seleccionada.
+    # Si hay un producto del treemap, se conserva solo ese producto.
     comparison_products_df = (
         comparison_products_df
         .sort_values(
             "#VENTAS MES ACTUAL",
             ascending=False,
         )
+        .head(len(comparison_products_df) if selected_treemap_products else family_top_n)
         .copy()
         .reset_index(drop=True)
     )
@@ -6986,6 +8189,19 @@ with tab_productos:
         )
     )
 
+    compare_title_text = (
+        (
+            "<b>COMPARACIÓN DE VENTAS DE PRODUCTOS SELECCIONADOS</b>"
+            if len(selected_treemap_products) > 1
+            else "<b>COMPARACIÓN DE VENTAS DEL PRODUCTO SELECCIONADO</b>"
+        )
+        if selected_treemap_products
+        else (
+            f"<b>COMPARACIÓN DE VENTAS POR PRODUCTO — "
+            f"TOP {top_label}</b>"
+        )
+    )
+
     fig_compare.update_layout(
         template="plotly_dark",
         barmode="group",
@@ -7000,8 +8216,8 @@ with tab_productos:
         ),
         title=dict(
             text=(
-                "<b>COMPARACIÓN DE VENTAS POR PRODUCTO</b>"
-                "<br>"
+                compare_title_text
+                + "<br>"
                 "<span style='font-size:13px;"
                 "color:#D8AE53;"
                 "letter-spacing:0.05em;'>"
@@ -7150,6 +8366,13 @@ with tab_productos:
             product_df.copy()
         )
 
+    product_detail_filtered = (
+        product_detail_filtered
+        .head(top_data_n)
+        .copy()
+        .reset_index(drop=True)
+    )
+
     detail_family_label = (
         str(selected_detail_family)
         if selected_detail_family
@@ -7157,7 +8380,7 @@ with tab_productos:
     )
 
     with st.expander(
-        f"🧾 Detalle por producto · {detail_family_label}",
+        f"🧾 Detalle por producto · TOP {top_label} · {detail_family_label}",
         expanded=False,
     ):
         st.markdown(
@@ -7165,7 +8388,7 @@ with tab_productos:
                 '<div class="executive-table-title" '
                 'style="border-left-color:#00D8F0;'
                 'margin-top:2px;">'
-                '🧾 Detalle por producto'
+                f'🧾 Detalle por producto — TOP {top_label}'
                 '<span style="margin-left:10px;'
                 'color:#D7AE58;'
                 'font-size:.72rem;'
@@ -7243,11 +8466,11 @@ with tab_ventas_utilidad_familia:
 
     st.caption(
         "Análisis ejecutivo de participación, utilidad y concentración "
-        "de ventas por familia. Se muestran las 20 familias principales."
+        f"de ventas por familia. Se muestran las {top_n} familias principales."
     )
 
     # --------------------------------------------------------
-    # DATOS BASE TOP 20
+    # DATOS BASE TOP DINÁMICO
     # --------------------------------------------------------
 
     family_sales_top20 = (
@@ -7262,7 +8485,7 @@ with tab_ventas_utilidad_familia:
             "$VENTAS MES ACTUAL",
             ascending=False,
         )
-        .head(20)
+        .head(top_n)
         .reset_index(drop=True)
     )
 
@@ -7278,24 +8501,87 @@ with tab_ventas_utilidad_familia:
             "$UTILIDAD MES ACTUAL",
             ascending=False,
         )
-        .head(20)
+        .head(top_n)
         .reset_index(drop=True)
     )
 
-    total_family_sales_top20 = safe_sum(
-        family_sales_top20[
+    selected_family_summary = (
+        st.session_state.get(
+            "selected_family_from_chart"
+        )
+    )
+
+    if selected_family_summary:
+        family_summary_df = (
+            filtered_df[
+                filtered_df["FAMILIA"]
+                .astype(str)
+                .eq(
+                    str(selected_family_summary)
+                )
+            ]
+            .copy()
+        )
+
+        family_summary_label = str(
+            selected_family_summary
+        )
+    else:
+        family_summary_df = (
+            filtered_df.copy()
+        )
+
+        family_summary_label = (
+            "TODAS LAS FAMILIAS"
+        )
+
+    total_family_sales_kpi = safe_sum(
+        family_summary_df[
             "$VENTAS MES ACTUAL"
         ]
     )
 
-    total_family_profit_top20 = safe_sum(
-        family_profit_top20[
+    total_family_profit_kpi = safe_sum(
+        family_summary_df[
             "$UTILIDAD MES ACTUAL"
         ]
     )
 
-    k_sales, k_profit = st.columns(
-        2,
+    total_family_inventory_kpi = safe_sum(
+        family_summary_df[
+            "INVENTARIO TOTAL"
+        ]
+    )
+
+    family_summary_empaq_values = (
+        family_summary_df["EMPAQ_ANALISIS"]
+        .fillna("")
+        .astype(str)
+        .str.strip()
+    )
+
+    family_summary_empaq_values = [
+        value
+        for value in family_summary_empaq_values.unique().tolist()
+        if value
+        and value.upper() not in {"NAN", "NONE"}
+    ]
+
+    if len(family_summary_empaq_values) == 1:
+        family_summary_inventory_empaq = (
+            family_summary_empaq_values[0]
+        )
+    elif len(family_summary_empaq_values) > 1:
+        family_summary_inventory_empaq = (
+            "VARIOS EMPAQUES"
+        )
+    else:
+        family_summary_inventory_empaq = (
+            "SIN EMPAQUE"
+        )
+
+    k_sales, k_profit, k_inventory = st.columns(
+        3,
         gap="large",
     )
 
@@ -7305,10 +8591,10 @@ with tab_ventas_utilidad_familia:
                 '<div class="family-compact-kpi" '
                 'style="--family-kpi-accent:#43B9E6;">'
                 '<div class="family-compact-kpi-label">'
-                '💵 VENTAS TOP 20 FAMILIAS'
+                f'💵 VENTAS · {html.escape(family_summary_label)}'
                 '</div>'
                 '<div class="family-compact-kpi-value">'
-                f'{money(total_family_sales_top20)}'
+                f'{money(total_family_sales_kpi)}'
                 '</div>'
                 '</div>'
             ),
@@ -7321,10 +8607,29 @@ with tab_ventas_utilidad_familia:
                 '<div class="family-compact-kpi" '
                 'style="--family-kpi-accent:#27C99B;">'
                 '<div class="family-compact-kpi-label">'
-                '📈 UTILIDAD TOP 20 FAMILIAS'
+                f'📈 UTILIDAD · {html.escape(family_summary_label)}'
                 '</div>'
                 '<div class="family-compact-kpi-value">'
-                f'{money(total_family_profit_top20)}'
+                f'{money(total_family_profit_kpi)}'
+                '</div>'
+                '</div>'
+            ),
+            unsafe_allow_html=True,
+        )
+
+    with k_inventory:
+        st.markdown(
+            (
+                '<div class="family-compact-kpi" '
+                'style="--family-kpi-accent:#A984D8;">'
+                '<div class="family-compact-kpi-label">'
+                f'📦 INVENTARIO · {html.escape(family_summary_label)}'
+                '</div>'
+                '<div class="family-compact-kpi-value">'
+                f'{quantity(total_family_inventory_kpi, 2)}'
+                '</div>'
+                '<div class="family-compact-kpi-note">'
+                f'EMPAQ: {html.escape(family_summary_inventory_empaq)}'
                 '</div>'
                 '</div>'
             ),
@@ -7335,110 +8640,6 @@ with tab_ventas_utilidad_familia:
         "<div style='height:8px'></div>",
         unsafe_allow_html=True,
     )
-
-    # ========================================================
-    # KEY METRICS — SIEMPRE VISIBLES
-    # Con familia seleccionada: valores de esa familia.
-    # Sin selección: valores generales de la vista filtrada.
-    # ========================================================
-
-    selected_family_kpi = (
-        st.session_state.get(
-            "selected_family_from_chart"
-        )
-    )
-
-    if selected_family_kpi:
-
-        family_kpi_df = (
-            filtered_df[
-                filtered_df["FAMILIA"]
-                .astype(str)
-                .eq(
-                    selected_family_kpi
-                )
-            ]
-            .copy()
-        )
-
-        family_kpi_context = (
-            selected_family_kpi
-        )
-
-    else:
-
-        family_kpi_df = (
-            filtered_df.copy()
-        )
-
-        family_kpi_context = (
-            "TODAS LAS FAMILIAS"
-        )
-
-    family_sales_kpi_value = safe_sum(
-        family_kpi_df[
-            "$VENTAS MES ACTUAL"
-        ]
-    )
-
-    family_inventory_kpi_value = safe_sum(
-        family_kpi_df[
-            "INVENTARIO TOTAL"
-        ]
-    )
-
-    st.markdown(
-        (
-            '<div class="family-selected-kpi-head">'
-            'KEY METRICS · '
-            f'{html.escape(str(family_kpi_context))}'
-            '</div>'
-        ),
-        unsafe_allow_html=True,
-    )
-
-    fk1, fk2 = st.columns(
-        2,
-        gap="large",
-    )
-
-    with fk1:
-        st.markdown(
-            (
-                '<div class="family-compact-kpi" '
-                'style="--family-kpi-accent:#43B9E6;">'
-                '<div class="family-compact-kpi-label">'
-                '💵 VENTA MES ACTUAL'
-                '</div>'
-                '<div class="family-compact-kpi-value">'
-                f'{money(family_sales_kpi_value)}'
-                '</div>'
-                '<div class="family-compact-kpi-note">'
-                'USD'
-                '</div>'
-                '</div>'
-            ),
-            unsafe_allow_html=True,
-        )
-
-    with fk2:
-        st.markdown(
-            (
-                '<div class="family-compact-kpi" '
-                'style="--family-kpi-accent:#27C99B;">'
-                '<div class="family-compact-kpi-label">'
-                '📦 TOTAL INVENTARIO'
-                '</div>'
-                '<div class="family-compact-kpi-value">'
-                f'{quantity(family_inventory_kpi_value, 2)}'
-                '</div>'
-                '<div class="family-compact-kpi-note">'
-                'unidades'
-                '</div>'
-                '</div>'
-            ),
-            unsafe_allow_html=True,
-        )
 
     st.markdown("---")
 
@@ -7451,8 +8652,26 @@ with tab_ventas_utilidad_familia:
     # FILA 1 — PARTICIPACIÓN + UTILIDAD
     # ========================================================
 
+    st.markdown(
+        """
+        <div style="
+            text-align:center;
+            font-family:Inter,'Segoe UI','Helvetica Neue',Arial,sans-serif;
+            font-size:1.05rem;
+            font-weight:750;
+            color:#DCE8F5;
+            letter-spacing:0.025em;
+            margin:0.20rem 0 0.90rem 0;
+        ">
+            HAGA CLIC EN CUALQUIERA DE LAS BARRAS PARA MOSTRAR
+            LA INFORMACIÓN DE LA FAMILIA.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
     chart_sales_col, chart_clear_col, chart_profit_col = st.columns(
-        [1, 0.14, 1],
+        [1, 0.22, 1],
         gap="medium",
     )
 
@@ -7463,15 +8682,14 @@ with tab_ventas_utilidad_familia:
         )
 
         st.button(
-            "🧹",
+            "Borrar filtro",
             key="clear_family_filter_between_charts",
-            help="Borrar filtro de familia",
             use_container_width=True,
             on_click=clear_family_selection,
         )
 
     # --------------------------------------------------------
-    # PARTICIPACIÓN DE VENTAS — TOP 20
+    # PARTICIPACIÓN DE VENTAS — TOP DINÁMICO
     # RANKING EJECUTIVO INTERACTIVO
     # --------------------------------------------------------
 
@@ -7684,7 +8902,7 @@ with tab_ventas_utilidad_familia:
                         in participation_base_df[
                             "FAMILIA"
                         ].astype(str).tolist()
-                        else "TOP 20 FAMILIAS"
+                        else f"TOP {top_label} FAMILIAS"
                     )
                     + "</span>"
                 ),
@@ -7876,7 +9094,7 @@ with tab_ventas_utilidad_familia:
                     ]
                 )
 
-                selected_products = int(
+                selected_product_count = int(
                     selected_df[
                         "#COD."
                     ]
@@ -7921,7 +9139,7 @@ with tab_ventas_utilidad_familia:
                     f'<div><span>Inventario</span>'
                     f'<b>{quantity(selected_inventory, 2)}</b></div>'
                     f'<div><span>Productos</span>'
-                    f'<b>{selected_products:,}</b></div>'
+                    f'<b>{selected_product_count:,}</b></div>'
                     f'<div><span>Unidades</span>'
                     f'<b>{quantity(selected_units, 0)}</b></div>'
                     f'</div>'
@@ -7941,7 +9159,7 @@ with tab_ventas_utilidad_familia:
                 )
 
     # --------------------------------------------------------
-    # UTILIDAD POR FAMILIA — TOP 20
+    # UTILIDAD POR FAMILIA — TOP DINÁMICO
     # --------------------------------------------------------
 
     with chart_profit_col:
@@ -8063,7 +9281,7 @@ with tab_ventas_utilidad_familia:
                     "<br>"
                     "<span style='font-size:14px;"
                     "color:#D7AE58;'>"
-                    "TOP 20 FAMILIAS"
+                    f"TOP {top_label} FAMILIAS"
                     "</span>"
                 ),
                 x=0.5,
@@ -8386,29 +9604,23 @@ with tab_ventas_utilidad_familia:
 with tab_pareto:
 
     st.markdown(
-        "### 📊 Pareto por familia"
+        "### 📊 Pareto 80/20 por familia"
     )
 
     st.caption(
-        "Análisis de concentración de ventas por familia. "
-        "Las barras muestran ventas y la línea el porcentaje acumulado."
+        "Análisis estático de concentración de ventas por familia. "
+        "Las familias se ordenan de mayor a menor venta y la línea "
+        "muestra el porcentaje acumulado. La referencia del 80% "
+        "identifica el grupo de familias que concentra la mayor parte "
+        "de las ventas."
     )
 
     # ========================================================
-    # FILA 2 — PARETO POR FAMILIA
+    # PARETO 80/20 — TODAS LAS FAMILIAS FILTRADAS
     # ========================================================
-
-    st.markdown("---")
-    st.markdown(
-        "### 📊 Pareto por familia"
-    )
-
-    st.caption(
-        "Las barras representan ventas por familia y la línea muestra "
-        "el porcentaje acumulado. La referencia del 80% permite identificar "
-        "las familias que concentran la mayor parte de las ventas."
-    )
-
+    # Para aplicar correctamente Pareto, el porcentaje acumulado
+    # debe calcularse contra el total de TODAS las familias, no
+    # únicamente contra TOP 10/20/50.
     pareto_df = (
         filtered_df
         .groupby(
@@ -8421,8 +9633,15 @@ with tab_pareto:
             "$VENTAS MES ACTUAL",
             ascending=False,
         )
-        .head(20)
         .reset_index(drop=True)
+    )
+
+    # Excluir familias sin nombre únicamente de la visualización.
+    pareto_df["FAMILIA"] = (
+        pareto_df["FAMILIA"]
+        .astype("string")
+        .fillna("SIN FAMILIA")
+        .astype(str)
     )
 
     pareto_total = safe_sum(
@@ -8432,7 +9651,6 @@ with tab_pareto:
     )
 
     if pareto_total > 0:
-
         pareto_df[
             "PORCENTAJE"
         ] = (
@@ -8451,9 +9669,7 @@ with tab_pareto:
             ]
             .cumsum()
         )
-
     else:
-
         pareto_df[
             "PORCENTAJE"
         ] = 0.0
@@ -8462,150 +9678,393 @@ with tab_pareto:
             "PORCENTAJE_ACUMULADO"
         ] = 0.0
 
+    total_families_pareto = int(
+        len(pareto_df)
+    )
+
+    # Primera posición que alcanza o supera el 80%.
+    if (
+        pareto_total > 0
+        and total_families_pareto > 0
+    ):
+        reaches_80 = (
+            pareto_df[
+                "PORCENTAJE_ACUMULADO"
+            ]
+            >= 80.0
+        )
+
+        if reaches_80.any():
+            pareto_cutoff_index = int(
+                reaches_80.idxmax()
+            )
+        else:
+            pareto_cutoff_index = (
+                total_families_pareto - 1
+            )
+
+        pareto_critical_count = (
+            pareto_cutoff_index + 1
+        )
+    else:
+        pareto_cutoff_index = 0
+        pareto_critical_count = 0
+
+    pareto_critical_pct = (
+        (
+            pareto_critical_count
+            / total_families_pareto
+            * 100
+        )
+        if total_families_pareto > 0
+        else 0.0
+    )
+
+    pareto_df[
+        "GRUPO_PARETO"
+    ] = [
+        (
+            "Familias que concentran el 80%"
+            if index
+            < pareto_critical_count
+            else "Resto de familias"
+        )
+        for index in range(
+            total_families_pareto
+        )
+    ]
+
+    # Para el Pareto mostramos el nombre COMPLETO de cada familia.
+    # No se recorta con puntos suspensivos.
     pareto_df[
         "FAMILIA_CORTA"
     ] = (
         pareto_df["FAMILIA"]
         .astype(str)
-        .apply(
-            lambda value:
-            value
-            if len(value) <= 16
-            else value[:15].rstrip()
-            + "…"
+        .str.strip()
+    )
+
+    # La lógica Pareto se calcula con TODAS las familias,
+    # pero la gráfica muestra únicamente las familias necesarias
+    # para alcanzar o superar el 80% de las ventas.
+    pareto_display_df = (
+        pareto_df
+        .head(
+            max(
+                pareto_critical_count,
+                1,
+            )
         )
+        .copy()
+        .reset_index(drop=True)
+    )
+
+    # --------------------------------------------------------
+    # Resumen ejecutivo Pareto 80/20
+    # --------------------------------------------------------
+    pareto_explanation_html = (
+        '<div style="'
+        'background:#102236;'
+        'border:1px solid #29445F;'
+        'border-left:4px solid #FFD166;'
+        'border-radius:10px;'
+        'padding:12px 16px;'
+        'margin:0.35rem 0 0.85rem 0;'
+        'font-family:Inter,Segoe UI,Helvetica Neue,Arial,sans-serif;'
+        'color:#DCE8F5;'
+        'line-height:1.55;'
+        '">'
+        '<div style="font-size:.95rem;font-weight:800;'
+        'color:#FFD166;margin-bottom:5px;">'
+        '¿Qué significa la regla Pareto 80/20?'
+        '</div>'
+        '<div style="font-size:.84rem;">'
+        'La regla Pareto indica que una parte pequeña de las familias '
+        'puede concentrar la mayor parte de las ventas. '
+        'En esta gráfica, las barras muestran las ventas de cada familia '
+        'ordenadas de mayor a menor, mientras que la línea amarilla muestra '
+        'el porcentaje acumulado de ventas. '
+        'La línea roja horizontal marca el 80%. '
+        'Las familias ubicadas antes del punto de corte representan el grupo '
+        'que, en conjunto, concentra aproximadamente el 80% de las ventas. '
+        'Esto permite identificar rápidamente cuáles familias tienen mayor '
+        'impacto comercial y requieren mayor atención en inventario, compras '
+        'y estrategia de ventas.'
+        '</div>'
+        '</div>'
+    )
+
+    st.markdown(
+        pareto_explanation_html,
+        unsafe_allow_html=True,
+    )
+
+    pareto_summary_html = (
+        '<div style="display:flex;flex-wrap:wrap;gap:10px;'
+        'margin:0.35rem 0 0.85rem 0;">'
+
+        '<div style="flex:1 1 240px;background:#102236;'
+        'border:1px solid #29445F;border-radius:10px;'
+        'padding:10px 14px;">'
+        '<div style="font-size:.68rem;color:#8FA8C1;'
+        'font-weight:700;letter-spacing:.04em;">'
+        'FAMILIAS QUE ALCANZAN EL 80%'
+        '</div>'
+        '<div style="font-size:1.20rem;color:#FFD166;'
+        'font-weight:850;margin-top:3px;">'
+        f'{pareto_critical_count:,} de {total_families_pareto:,}'
+        '</div>'
+        '</div>'
+
+        '<div style="flex:1 1 240px;background:#102236;'
+        'border:1px solid #29445F;border-radius:10px;'
+        'padding:10px 14px;">'
+        '<div style="font-size:.68rem;color:#8FA8C1;'
+        'font-weight:700;letter-spacing:.04em;">'
+        '% DE FAMILIAS NECESARIAS'
+        '</div>'
+        '<div style="font-size:1.20rem;color:#43D7C0;'
+        'font-weight:850;margin-top:3px;">'
+        f'{pareto_critical_pct:.1f}%'
+        '</div>'
+        '</div>'
+
+        '<div style="flex:1 1 240px;background:#102236;'
+        'border:1px solid #29445F;border-radius:10px;'
+        'padding:10px 14px;">'
+        '<div style="font-size:.68rem;color:#8FA8C1;'
+        'font-weight:700;letter-spacing:.04em;">'
+        'VENTAS TOTALES ANALIZADAS'
+        '</div>'
+        '<div style="font-size:1.20rem;color:#54C8FF;'
+        'font-weight:850;margin-top:3px;">'
+        f'{money(pareto_total)}'
+        '</div>'
+        '</div>'
+
+        '</div>'
+    )
+
+    st.markdown(
+        pareto_summary_html,
+        unsafe_allow_html=True,
     )
 
     import plotly.graph_objects as go
 
     pareto_fig = go.Figure()
 
+    # Barras:
+    # - grupo que alcanza el 80%: destacado
+    # - resto: tono tenue
+    pareto_executive_palette = [
+        "#2FC3A4",  # verde turquesa
+        "#4DA3FF",  # azul ejecutivo
+        "#F2B84B",  # dorado
+        "#8B6FE8",  # violeta
+        "#E86E7A",  # coral
+        "#39B7C8",  # cyan
+        "#6CBF84",  # verde
+        "#D8894B",  # cobre
+        "#6F8FC9",  # azul acero
+        "#B879D6",  # púrpura
+        "#4FB6A8",  # teal
+        "#D6A84F",  # mostaza
+        "#5FA8D3",  # azul claro
+        "#C66C84",  # rosa ejecutivo
+        "#7DAA55",  # oliva vivo
+        "#A978D1",  # lavanda
+        "#E08E45",  # naranja sobrio
+        "#3E9E8F",  # verde petróleo
+        "#7089C4",  # índigo suave
+        "#C98B55",  # bronce
+    ]
+
+    pareto_bar_colors = [
+        pareto_executive_palette[
+            index
+            % len(
+                pareto_executive_palette
+            )
+        ]
+        for index in range(
+            len(pareto_display_df)
+        )
+    ]
+
     pareto_fig.add_trace(
         go.Bar(
-            x=pareto_df[
+            x=pareto_display_df[
                 "FAMILIA_CORTA"
             ],
-            y=pareto_df[
+            y=pareto_display_df[
                 "$VENTAS MES ACTUAL"
-            ],
-            customdata=pareto_df[
-                "FAMILIA"
             ],
             name="Ventas",
             marker=dict(
-                color=[
-                    FAMILY_EXEC_COLORS[
-                        i % len(
-                            FAMILY_EXEC_COLORS
-                        )
-                    ]
-                    for i in range(
-                        len(pareto_df)
-                    )
-                ],
+                color=pareto_bar_colors,
                 line=dict(
-                    color="rgba(255,255,255,.18)",
-                    width=.9,
+                    color=(
+                        "rgba(255,255,255,.12)"
+                    ),
+                    width=.7,
                 ),
             ),
-            hovertemplate=(
-                "<b>%{customdata}</b><br>"
-                "Ventas: $%{y:,.2f}"
-                "<extra></extra>"
-            ),
+            hoverinfo="skip",
         )
     )
 
     pareto_fig.add_trace(
         go.Scatter(
-            x=pareto_df[
+            x=pareto_display_df[
                 "FAMILIA_CORTA"
             ],
-            y=pareto_df[
+            y=pareto_display_df[
                 "PORCENTAJE_ACUMULADO"
-            ],
-            customdata=pareto_df[
-                "FAMILIA"
             ],
             name="% acumulado",
             mode="lines+markers",
             yaxis="y2",
             line=dict(
-                color="#F2C14E",
+                color="#F4BE45",
                 width=3.0,
             ),
             marker=dict(
-                size=7,
+                size=5.5,
                 color="#FFD166",
                 line=dict(
                     color="#07121E",
-                    width=1,
+                    width=.8,
                 ),
             ),
-            hovertemplate=(
-                "<b>%{customdata}</b><br>"
-                "Acumulado: %{y:.1f}%"
-                "<extra></extra>"
-            ),
+            hoverinfo="skip",
         )
     )
 
+    # Línea horizontal del 80%.
     pareto_fig.add_hline(
         y=80,
         line_dash="dash",
-        line_width=1.5,
-        line_color="#E96573",
-        annotation_text="80%",
+        line_width=2,
+        line_color="#EF6B73",
+        annotation_text="80% DE VENTAS",
         annotation_position="top right",
         yref="y2",
+        annotation_font=dict(
+            color="#FF8A92",
+            size=11,
+        ),
     )
+
+    # Línea vertical que marca la última familia necesaria para
+    # alcanzar / superar el 80%.
+    if (
+        pareto_critical_count > 0
+        and total_families_pareto > 0
+    ):
+        cutoff_family_short = str(
+            pareto_display_df.iloc[
+                -1
+            ]["FAMILIA_CORTA"]
+        )
+
+        # Plotly add_vline() puede fallar con ejes categóricos
+        # en algunas versiones al intentar promediar strings.
+        # Usamos add_shape + add_annotation para mantener el
+        # mismo marcador vertical de forma compatible.
+        pareto_fig.add_shape(
+            type="line",
+            x0=cutoff_family_short,
+            x1=cutoff_family_short,
+            y0=0,
+            y1=1,
+            xref="x",
+            yref="paper",
+            line=dict(
+                color="#FFD166",
+                width=1.5,
+                dash="dot",
+            ),
+        )
+
+        pareto_fig.add_annotation(
+            x=cutoff_family_short,
+            y=1.02,
+            xref="x",
+            yref="paper",
+            text=(
+                f"{pareto_critical_count} familias "
+                f"({pareto_critical_pct:.1f}%)"
+            ),
+            showarrow=False,
+            xanchor="center",
+            yanchor="bottom",
+            font=dict(
+                color="#FFD166",
+                size=10,
+            ),
+            bgcolor="rgba(14,27,43,.85)",
+            bordercolor="rgba(255,209,102,.30)",
+            borderwidth=1,
+            borderpad=3,
+        )
 
     pareto_fig.update_layout(
         template="plotly_dark",
-        height=560,
+        height=650,
         paper_bgcolor="#0E1B2B",
         plot_bgcolor="#0E1B2B",
         title=dict(
             text=(
-                "Pareto de ventas "
-                "por familia — Top 20"
+                "<b>PARETO 80/20 DE VENTAS POR FAMILIA</b>"
+                "<br>"
+                "<span style='font-size:13px;"
+                "color:#AFC1D3;'>"
+                f"Mostrando {pareto_critical_count} de "
+                f"{total_families_pareto} familias: "
+                "las necesarias para alcanzar al menos "
+                "el 80% de las ventas"
+                "</span>"
             ),
             x=0.5,
             xanchor="center",
             font=dict(
-                size=17,
+                size=18,
                 color="#FFFFFF",
             ),
         ),
         margin=dict(
-            l=55,
-            r=65,
-            t=75,
-            b=135,
+            l=60,
+            r=70,
+            t=95,
+            b=210,
         ),
-        bargap=.34,
-        hovermode="x unified",
+        bargap=.28,
+        hovermode=False,
+        dragmode=False,
         xaxis=dict(
             title="Familia",
-            tickangle=-35,
+            tickangle=-38,
             tickfont=dict(
-                size=9,
-                color="#9EB1C4",
+                size=11,
+                color="#C3D1DF",
             ),
             showgrid=False,
             automargin=True,
+            fixedrange=True,
         ),
         yaxis=dict(
             title="Ventas ($)",
             tickfont=dict(
                 size=9,
-                color="#9EB1C4",
+                color="#A5B7C9",
             ),
             gridcolor=(
                 "rgba(65,88,111,.22)"
             ),
             griddash="dot",
             zeroline=False,
+            fixedrange=True,
         ),
         yaxis2=dict(
             title="% acumulado",
@@ -8622,11 +10081,12 @@ with tab_pareto:
             ),
             showgrid=False,
             zeroline=False,
+            fixedrange=True,
         ),
         legend=dict(
             orientation="h",
             yanchor="bottom",
-            y=1.01,
+            y=1.015,
             xanchor="right",
             x=1,
             bgcolor="rgba(0,0,0,0)",
@@ -8637,14 +10097,19 @@ with tab_pareto:
         ),
     )
 
+    # Gráfica deliberadamente NO interactiva.
     st.plotly_chart(
         pareto_fig,
         use_container_width=True,
-        key="family_pareto_chart",
+        key="family_pareto_chart_static_80_20",
+        config={
+            "staticPlot": True,
+            "displayModeBar": False,
+            "responsive": True,
+        },
     )
 
 
-# ============================================================
 # PESTAÑA 5 — INSIGHTS
 # ============================================================
 
@@ -9273,7 +10738,7 @@ with tab_alertas:
 
     st.markdown(
         '<div class="executive-table-title" style="border-left-color:#E05D68;">'
-        '⚠️ Productos con ventas perdidas'
+        f'⚠️ TOP {top_label} productos con ventas perdidas'
         '</div>',
         unsafe_allow_html=True,
     )
@@ -9290,7 +10755,7 @@ with tab_alertas:
                 "INVENTARIO TOTAL",
                 "$VENTAS MES ACTUAL",
             ]
-        ].copy()
+        ].copy().head(top_data_n)
 
         render_executive_html_table(
             lost_table,
@@ -9316,7 +10781,7 @@ with tab_alertas:
 
     st.markdown(
         '<div class="executive-table-title" style="border-left-color:#E2A84A;">'
-        '📦 Productos sin ventas en el mes actual pero con inventario'
+        f'📦 TOP {top_label} productos sin ventas en el mes actual pero con inventario'
         '</div>',
         unsafe_allow_html=True,
     )
@@ -9334,7 +10799,7 @@ with tab_alertas:
                 "INVENTARIO TOTAL",
                 "COSTO ACTUAL",
             ]
-        ].copy()
+        ].copy().head(top_data_n)
 
         render_executive_html_table(
             no_sales_table,
@@ -9362,7 +10827,7 @@ with tab_alertas:
 
     st.markdown(
         '<div class="executive-table-title" style="border-left-color:#9D7CE2;">'
-        '📉 Productos con margen negativo'
+        f'📉 TOP {top_label} productos con margen negativo'
         '</div>',
         unsafe_allow_html=True,
     )
@@ -9381,7 +10846,7 @@ with tab_alertas:
                 "COSTO ACTUAL",
                 "PRECIO PROMEDIO",
             ]
-        ].copy()
+        ].copy().head(top_data_n)
 
         render_executive_html_table(
             negative_margin_table,
@@ -9415,7 +10880,7 @@ with tab_alertas:
 st.markdown("---")
 
 with st.expander(
-    "🔎 Ver datos originales después de filtros",
+    f"🔎 Ver TOP {top_label} datos originales después de filtros",
     expanded=False,
 ):
 
@@ -9430,6 +10895,7 @@ with st.expander(
                 na_position="last",
             )
             .reset_index(drop=True)
+            .head(top_data_n)
         )
 
     original_column_labels = {
@@ -10198,8 +11664,9 @@ st.markdown(
     .exec-family-detail-grid span {
         display: block;
         color: #6F8498;
-        font-size: .45rem;
-        margin-bottom: 2px;
+        font-size: .66rem;
+        font-weight: 650;
+        margin-bottom: 4px;
     }
 
     .exec-family-detail-grid b {
@@ -10244,8 +11711,8 @@ st.markdown(
     """
     <style>
     .family-meeting-card {
-        margin-top: 8px;
-        padding: 13px 14px;
+        margin-top: 10px;
+        padding: 18px 18px;
         border-radius: 10px;
         border: 1px solid #29445E;
         border-left: 4px solid #D7AE58;
@@ -10263,9 +11730,9 @@ st.markdown(
         display: flex;
         justify-content: space-between;
         align-items: center;
-        gap: 14px;
-        padding-bottom: 9px;
-        margin-bottom: 9px;
+        gap: 18px;
+        padding-bottom: 13px;
+        margin-bottom: 13px;
         border-bottom: 1px solid #263E55;
     }
 
@@ -10273,7 +11740,7 @@ st.markdown(
         color: #73889D;
         font-family:
             "Inter","Segoe UI",Arial,sans-serif;
-        font-size: .48rem;
+        font-size: .86rem;
         font-weight: 820;
         letter-spacing: .06em;
     }
@@ -10282,9 +11749,9 @@ st.markdown(
         color: #F0D487;
         font-family:
             "Inter","Segoe UI",Arial,sans-serif;
-        font-size: .78rem;
+        font-size: 1.38rem;
         font-weight: 850;
-        line-height: 1.12;
+        line-height: 1.18;
         margin-top: 3px;
     }
 
@@ -10292,7 +11759,7 @@ st.markdown(
         color: #43B9E6;
         font-family:
             "Inter","Segoe UI",Arial,sans-serif;
-        font-size: 1.00rem;
+        font-size: 1.72rem;
         font-weight: 880;
         text-align: right;
         white-space: nowrap;
@@ -10301,7 +11768,7 @@ st.markdown(
     .family-meeting-share span {
         display: block;
         color: #71869B;
-        font-size: .43rem;
+        font-size: .76rem;
         font-weight: 650;
         margin-top: 1px;
     }
@@ -10310,12 +11777,12 @@ st.markdown(
         display: grid;
         grid-template-columns:
             repeat(3, minmax(0,1fr));
-        gap: 6px;
+        gap: 9px;
     }
 
     .family-meeting-grid div {
         min-width: 0;
-        padding: 7px 8px;
+        padding: 11px 12px;
         border-radius: 8px;
         background: #102034;
         border: 1px solid #213950;
@@ -10324,15 +11791,16 @@ st.markdown(
     .family-meeting-grid span {
         display: block;
         color: #71869A;
-        font-size: .45rem;
+        font-size: .66rem;
         margin-bottom: 2px;
     }
 
     .family-meeting-grid b {
         display: block;
         color: #E3EBF3;
-        font-size: .61rem;
-        line-height: 1.05;
+        font-size: 1.02rem;
+        font-weight: 780;
+        line-height: 1.15;
         overflow-wrap: anywhere;
     }
     </style>
@@ -10800,7 +12268,7 @@ st.markdown(
     """
     <style>
     .dicasa-corporate-header {
-        min-height: 92px !important;
+        min-height: 108px !important;
         padding: 14px 20px !important;
         border: 1px solid #233C55 !important;
         background:
@@ -10820,16 +12288,38 @@ st.markdown(
             inset 0 1px 0 rgba(255,255,255,.03) !important;
     }
 
-    .dicasa-corporate-header .dash-header-left {
-        gap: 16px !important;
-        flex: 1;
+    .dicasa-corporate-header {
+        display: grid !important;
+        grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) !important;
+        align-items: center !important;
+        column-gap: 14px !important;
+    }
+
+    .dicasa-header-logo-zone {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        min-width: 0;
+    }
+
+    .dicasa-header-copy {
+        min-width: 0;
+        text-align: center !important;
+        justify-self: center;
+        width: auto !important;
+    }
+
+    .dicasa-header-badge-zone {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
         min-width: 0;
     }
 
     .dicasa-logo-frame {
-        width: 72px;
-        height: 72px;
-        flex: 0 0 72px;
+        width: 84px;
+        height: 84px;
+        flex: 0 0 84px;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -10849,16 +12339,14 @@ st.markdown(
         display: block;
     }
 
-    .dicasa-header-copy {
-        min-width: 0;
-    }
-
     .dicasa-title-line {
         display: flex;
         align-items: baseline;
+        justify-content: center !important;
         flex-wrap: wrap;
         gap: 9px;
         line-height: 1.08;
+        text-align: center !important;
     }
 
     .dicasa-dashboard-title {
@@ -10920,13 +12408,15 @@ st.markdown(
 
     @media (max-width: 900px) {
         .dicasa-corporate-header {
-            align-items: flex-start !important;
+            grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) !important;
+            column-gap: 9px !important;
+            align-items: center !important;
         }
 
         .dicasa-logo-frame {
-            width: 60px;
-            height: 60px;
-            flex-basis: 60px;
+            width: 68px;
+            height: 68px;
+            flex-basis: 68px;
         }
 
         .dicasa-dashboard-title {
@@ -10935,6 +12425,11 @@ st.markdown(
 
         .dicasa-company-name {
             font-size: 1.12rem;
+        }
+
+        .dash-badge {
+            font-size: .58rem !important;
+            padding: 7px 10px !important;
         }
     }
     </style>
@@ -10945,37 +12440,35 @@ st.markdown(
 
 
 # ============================================================
-# KPI PRINCIPALES — SIN CORTES NI SALTOS INDESEADOS
+# KPI PRINCIPALES — TAMAÑO ESTABLE, SIN REDUCCIÓN POSTERIOR
 # ============================================================
 
 st.markdown(
     """
     <style>
-    /* Tarjetas principales */
+    /* Este bloque se carga al final y FIJA los tamaños definitivos.
+       Evita que estilos posteriores o media queries reduzcan los KPI. */
     .exec-kpi,
     .leader-card {
-        height: 126px !important;
-        min-height: 126px !important;
-        padding: 12px 12px 10px 12px !important;
+        height: 158px !important;
+        min-height: 158px !important;
+        padding: 18px 18px 15px !important;
     }
 
-    /* Títulos KPI: más compactos, pero legibles */
     .exec-kpi-label,
     .leader-label {
-        font-size: .53rem !important;
-        line-height: 1.08 !important;
+        font-size: 16px !important;
+        line-height: 1.18 !important;
         letter-spacing: .025em !important;
-        margin-bottom: 5px !important;
+        margin-bottom: 8px !important;
         overflow: visible !important;
         white-space: normal !important;
         word-break: normal !important;
     }
 
-    /* Valores numéricos: siempre en una sola línea */
-    .exec-kpi-value,
-    .leader-value {
-        font-size: .66rem !important;
-        line-height: 1.04 !important;
+    .exec-kpi-value {
+        font-size: 20px !important;
+        line-height: 1.06 !important;
         letter-spacing: -.015em !important;
         white-space: nowrap !important;
         overflow: visible !important;
@@ -10983,9 +12476,8 @@ st.markdown(
         word-break: keep-all !important;
     }
 
-    /* Nombres de familia/producto */
     .leader-name {
-        font-size: .90rem !important;
+        font-size: 18px !important;
         line-height: 1.18 !important;
         margin-bottom: 8px !important;
         display: -webkit-box !important;
@@ -10998,46 +12490,59 @@ st.markdown(
     }
 
     .leader-code {
-        font-size: .70rem !important;
-        line-height: 1.18 !important;
+        font-size: 15px !important;
+        line-height: 1.20 !important;
         margin-bottom: 5px !important;
         white-space: normal !important;
         color:#C9DCF4 !important;
         font-weight:760 !important;
     }
 
+    .leader-value {
+        font-size: 20px !important;
+        line-height: 1.18 !important;
+        white-space: nowrap !important;
+    }
+
     .exec-kpi-note {
-        font-size: .64rem !important;
+        font-size: 15px !important;
         line-height: 1.18 !important;
         padding-top: 8px !important;
         color:#BFD7F2 !important;
         font-weight:760 !important;
     }
 
-    /* Reducir separación entre columnas para ganar ancho útil */
+    /* Mantener el pequeño espacio horizontal sin comprimir tipografía */
     div[data-testid="stHorizontalBlock"] {
         gap: .55rem !important;
     }
 
-    /* Asegurar que el contenido interno use todo el ancho */
     div[data-testid="stColumn"] > div {
         min-width: 0 !important;
     }
 
-    /* En pantallas algo menores, comprimir un poco más */
+    /* IMPORTANTE:
+       no reducir la tipografía KPI en pantallas <=1500px. */
     @media (max-width: 1500px) {
-        .exec-kpi-value,
-        .leader-value {
-            font-size: .70rem !important;
-        }
-
         .exec-kpi-label,
         .leader-label {
-            font-size: .49rem !important;
+            font-size: 16px !important;
+        }
+
+        .exec-kpi-value {
+            font-size: 20px !important;
         }
 
         .leader-name {
-            font-size: .65rem !important;
+            font-size: 18px !important;
+        }
+
+        .leader-code {
+            font-size: 15px !important;
+        }
+
+        .leader-value {
+            font-size: 20px !important;
         }
     }
     </style>
