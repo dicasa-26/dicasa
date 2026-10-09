@@ -4428,74 +4428,6 @@ def render_executive_html_table(
 st.markdown("---")
 st.markdown("## Exploración ejecutiva")
 
-
-# ============================================================
-# TEXTOS DESCRIPTIVOS Y LEYENDAS DE GRÁFICAS — ALTO CONTRASTE
-# ============================================================
-
-st.markdown(
-    """
-    <style>
-    div[data-testid="stCaptionContainer"],
-    div[data-testid="stCaptionContainer"] p,
-    div[data-testid="stCaptionContainer"] span {
-        color:#D9ECFF !important;
-        font-weight:650 !important;
-        opacity:1 !important;
-    }
-
-    .chart-zero-value-note {
-        display:inline-flex;
-        align-items:center;
-        gap:6px;
-        margin:2px 0 8px 0;
-        padding:5px 10px;
-        border:1px solid rgba(91,192,235,.35);
-        border-radius:8px;
-        background:rgba(30,77,112,.18);
-        color:#CFEAFF !important;
-        font-size:.76rem;
-        line-height:1.25;
-        font-weight:720;
-        letter-spacing:.01em;
-    }
-
-    .chart-zero-value-note.treemap-note {
-        border-color:rgba(168,132,216,.38);
-        background:rgba(95,65,135,.17);
-        color:#E4D9FF !important;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
-
-def render_zero_value_chart_note() -> None:
-    st.markdown(
-        (
-            '<div class="chart-zero-value-note">'
-            'ℹ️ Solo se muestran familias o productos '
-            'con valores de venta mayores que cero.'
-            '</div>'
-        ),
-        unsafe_allow_html=True,
-    )
-
-
-def render_treemap_chart_note() -> None:
-    st.markdown(
-        (
-            '<div class="chart-zero-value-note treemap-note">'
-            'ℹ️ Se muestran productos con ventas mayores que cero; '
-            'también se conservan productos con inventario disponible '
-            'aunque su venta sea 0.'
-            '</div>'
-        ),
-        unsafe_allow_html=True,
-    )
-
-
 (
     tab_resumen_ejecutivo,
     tab_familia,
@@ -4672,16 +4604,6 @@ with tab_familia:
             ascending=False,
         )
         .head(family_visual_limit)
-        .reset_index(drop=True)
-    )
-
-    family_sales_selector = (
-        family_sales_selector[
-            family_sales_selector["$VENTAS MES ACTUAL"]
-            .fillna(0)
-            .ne(0)
-        ]
-        .copy()
         .reset_index(drop=True)
     )
 
@@ -5445,7 +5367,6 @@ with tab_familia:
                 ),
             )
 
-    render_zero_value_chart_note()
     selector_event = st.plotly_chart(
         selector_fig,
         use_container_width=True,
@@ -5628,16 +5549,6 @@ with tab_familia:
             .head(top_n)
         )
 
-        comparison_products = (
-            comparison_products[
-                comparison_products["TOTAL_COMPARACION"]
-                .fillna(0)
-                .ne(0)
-            ]
-            .copy()
-            .reset_index(drop=True)
-        )
-
         comparison_products[
             "PRODUCTO"
         ] = (
@@ -5704,7 +5615,6 @@ with tab_familia:
             ),
         )
 
-        render_zero_value_chart_note()
         st.plotly_chart(
             fig,
             use_container_width=True,
@@ -5737,24 +5647,6 @@ with tab_familia:
                 ascending=False,
             )
             .head(family_visual_limit)
-        )
-
-        comparison = (
-            comparison[
-                (
-                    comparison["#VENTAS MES ANTERIOR"]
-                    .fillna(0)
-                    .ne(0)
-                )
-                |
-                (
-                    comparison["#VENTAS MES ACTUAL"]
-                    .fillna(0)
-                    .ne(0)
-                )
-            ]
-            .copy()
-            .reset_index(drop=True)
         )
 
         comparison[
@@ -5841,7 +5733,6 @@ with tab_familia:
             ),
         )
 
-        render_zero_value_chart_note()
         st.plotly_chart(
             fig,
             use_container_width=True,
@@ -5877,16 +5768,6 @@ with tab_familia:
                 ascending=False,
             )
             .head(top_n)
-        )
-
-        total_product_sales = (
-            total_product_sales[
-                total_product_sales["$VENTAS MES ACTUAL"]
-                .fillna(0)
-                .ne(0)
-            ]
-            .copy()
-            .reset_index(drop=True)
         )
 
         total_product_sales[
@@ -5959,7 +5840,6 @@ with tab_familia:
             ),
         )
 
-        render_zero_value_chart_note()
         st.plotly_chart(
             fig,
             use_container_width=True,
@@ -5983,16 +5863,6 @@ with tab_familia:
                 "$VENTAS MES ACTUAL",
                 ascending=False,
             )
-            .reset_index(drop=True)
-        )
-
-        total_by_family_all = (
-            total_by_family_all[
-                total_by_family_all["$VENTAS MES ACTUAL"]
-                .fillna(0)
-                .ne(0)
-            ]
-            .copy()
             .reset_index(drop=True)
         )
 
@@ -6102,7 +5972,6 @@ with tab_familia:
             ),
         )
 
-        render_zero_value_chart_note()
         st.plotly_chart(
             fig,
             use_container_width=True,
@@ -7072,16 +6941,6 @@ with tab_productos:
         .copy()
     )
 
-    top_products = (
-        top_products[
-            top_products["$VENTAS MES ACTUAL"]
-            .fillna(0)
-            .ne(0)
-        ]
-        .copy()
-        .reset_index(drop=True)
-    )
-
     top_products["PRODUCTO"] = (
         top_products["#COD."]
         .astype(str)
@@ -7182,7 +7041,6 @@ with tab_productos:
 
     apply_executive_bar_style(fig)
 
-    render_zero_value_chart_note()
     st.plotly_chart(
         fig,
         use_container_width=True,
@@ -7239,24 +7097,6 @@ with tab_productos:
                 ascending=False,
             )
             .head(family_top_n)
-            .reset_index(drop=True)
-        )
-
-        family_products = (
-            family_products[
-                (
-                    family_products["$VENTAS MES ACTUAL"]
-                    .fillna(0)
-                    .ne(0)
-                )
-                |
-                (
-                    family_products["INVENTARIO TOTAL"]
-                    .fillna(0)
-                    .ne(0)
-                )
-            ]
-            .copy()
             .reset_index(drop=True)
         )
 
@@ -7682,7 +7522,6 @@ with tab_productos:
             clickmode="event+select",
         )
 
-        render_treemap_chart_note()
         treemap_event = st.plotly_chart(
             fig,
             use_container_width=True,
@@ -7914,16 +7753,6 @@ with tab_productos:
             ascending=False,
         )
         .head(family_top_n)
-        .reset_index(drop=True)
-    )
-
-    selected_family_products_chart = (
-        selected_family_products_chart[
-            selected_family_products_chart["$VENTAS MES ACTUAL"]
-            .fillna(0)
-            .ne(0)
-        ]
-        .copy()
         .reset_index(drop=True)
     )
 
@@ -8247,24 +8076,6 @@ with tab_productos:
         )
     )
 
-    comparison_products_df = (
-        comparison_products_df[
-            (
-                comparison_products_df["#VENTAS MES ANTERIOR"]
-                .fillna(0)
-                .ne(0)
-            )
-            |
-            (
-                comparison_products_df["#VENTAS MES ACTUAL"]
-                .fillna(0)
-                .ne(0)
-            )
-        ]
-        .copy()
-        .reset_index(drop=True)
-    )
-
     comparison_products_df[
         "PRODUCTO"
     ] = (
@@ -8345,11 +8156,7 @@ with tab_productos:
                 "#VENTAS MES ANTERIOR"
             ].apply(
                 lambda value:
-                (
-                    f"{value:,.0f}"
-                    if pd.notna(value) and float(value) != 0
-                    else ""
-                )
+                f"{value:,.0f}"
             ),
             textposition="outside",
             cliponaxis=False,
@@ -8386,11 +8193,7 @@ with tab_productos:
                 "#VENTAS MES ACTUAL"
             ].apply(
                 lambda value:
-                (
-                    f"{value:,.0f}"
-                    if pd.notna(value) and float(value) != 0
-                    else ""
-                )
+                f"{value:,.0f}"
             ),
             textposition="outside",
             cliponaxis=False,
@@ -8530,7 +8333,6 @@ with tab_productos:
     )
 
     with chart_left_col:
-        render_zero_value_chart_note()
         st.plotly_chart(
             fig,
             use_container_width=True,
@@ -8538,7 +8340,6 @@ with tab_productos:
         )
 
     with chart_right_col:
-        render_zero_value_chart_note()
         st.plotly_chart(
             fig_compare,
             use_container_width=True,
@@ -8682,20 +8483,9 @@ with tab_ventas_utilidad_familia:
         "### 💰 Ventas y utilidad por familia"
     )
 
-    st.markdown(
-        (
-            '<div style="'
-            'color:#D9ECFF;'
-            'font-size:.88rem;'
-            'font-weight:700;'
-            'line-height:1.35;'
-            'margin:2px 0 10px 0;'
-            '">'
-            'Análisis ejecutivo de participación, utilidad y concentración '
-            f'de ventas por familia. Se muestran las {top_n} familias principales.'
-            '</div>'
-        ),
-        unsafe_allow_html=True,
+    st.caption(
+        "Análisis ejecutivo de participación, utilidad y concentración "
+        f"de ventas por familia. Se muestran las {top_n} familias principales."
     )
 
     # --------------------------------------------------------
@@ -8718,16 +8508,6 @@ with tab_ventas_utilidad_familia:
         .reset_index(drop=True)
     )
 
-    family_sales_top20 = (
-        family_sales_top20[
-            family_sales_top20["$VENTAS MES ACTUAL"]
-            .fillna(0)
-            .ne(0)
-        ]
-        .copy()
-        .reset_index(drop=True)
-    )
-
     family_profit_top20 = (
         filtered_df
         .groupby(
@@ -8741,16 +8521,6 @@ with tab_ventas_utilidad_familia:
             ascending=False,
         )
         .head(top_n)
-        .reset_index(drop=True)
-    )
-
-    family_profit_top20 = (
-        family_profit_top20[
-            family_profit_top20["$UTILIDAD MES ACTUAL"]
-            .fillna(0)
-            .ne(0)
-        ]
-        .copy()
         .reset_index(drop=True)
     )
 
@@ -9215,7 +8985,6 @@ with tab_ventas_utilidad_familia:
             ),
         )
 
-        render_zero_value_chart_note()
         participation_event = st.plotly_chart(
             participation_fig,
             use_container_width=True,
@@ -9446,16 +9215,6 @@ with tab_ventas_utilidad_familia:
                 .copy()
             )
 
-        utility_chart = (
-            utility_chart[
-                utility_chart["$UTILIDAD MES ACTUAL"]
-                .fillna(0)
-                .ne(0)
-            ]
-            .copy()
-            .reset_index(drop=True)
-        )
-
         utility_chart[
             "FAMILIA_CORTA"
         ] = (
@@ -9582,7 +9341,6 @@ with tab_ventas_utilidad_familia:
             ),
         )
 
-        render_zero_value_chart_note()
         profit_event = st.plotly_chart(
             fig,
             use_container_width=True,
@@ -9900,16 +9658,6 @@ with tab_pareto:
             "$VENTAS MES ACTUAL",
             ascending=False,
         )
-        .reset_index(drop=True)
-    )
-
-    pareto_df = (
-        pareto_df[
-            pareto_df["$VENTAS MES ACTUAL"]
-            .fillna(0)
-            .gt(0)
-        ]
-        .copy()
         .reset_index(drop=True)
     )
 
@@ -10375,7 +10123,6 @@ with tab_pareto:
     )
 
     # Gráfica deliberadamente NO interactiva.
-    render_zero_value_chart_note()
     st.plotly_chart(
         pareto_fig,
         use_container_width=True,
