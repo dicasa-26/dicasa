@@ -4093,9 +4093,17 @@ total_profit = (
 
 total_inventory = (
     safe_sum(
-        df[
-            "INVENTARIO TOTAL"
-        ]
+        (
+            df[
+                "INVENTARIO TOTAL"
+            ]
+            .fillna(0)
+            *
+            df[
+                "COSTO ACTUAL"
+            ]
+            .fillna(0)
+        )
     )
 )
 
@@ -4302,68 +4310,7 @@ else:
     top_product_sales = 0.0
 
 
-# ============================================================
-# MOSTRAR KPI — UNA SOLA FILA EJECUTIVA
-# ============================================================
 
-st.markdown("## Resumen ejecutivo")
-
-# ------------------------------------------------------------
-# FILA 1 — KPI FINANCIEROS Y OPERATIVOS
-# ------------------------------------------------------------
-k1, k2, k3, k4, k5 = st.columns(5, gap="small")
-
-with k1:
-    render_exec_kpi("💵 Ventas mes", money(total_sales), "#43B9E6")
-
-with k2:
-    render_exec_kpi("📈 Utilidad mes", money(total_profit), "#27C99B")
-
-with k3:
-    render_exec_kpi("📦 Inventario", quantity(total_inventory, 2), "#A984D8")
-
-with k4:
-    render_exec_kpi("⚠️ Ventas perdidas", quantity(lost_sales, 2), "#E96573")
-
-with k5:
-    render_exec_kpi("◉ Margen promedio", percent(average_margin), "#D7AE58")
-
-st.markdown(
-    '<div style="height:28px;"></div>',
-    unsafe_allow_html=True,
-)
-
-# ------------------------------------------------------------
-# FILA 2 — DIMENSIÓN Y LIDERAZGO
-# ------------------------------------------------------------
-k6, k7, k8, k9 = st.columns(4, gap="small")
-
-with k6:
-    render_exec_kpi("▣ Productos", f"{product_count:,}", "#6F91B2")
-
-with k7:
-    render_exec_kpi("◆ Familias", f"{family_count:,}", "#C79356")
-
-with k8:
-    st.markdown(
-        f"""<div class="leader-card" style="--accent:#27C99B;">
-<div class="leader-label">Familia mayor venta</div>
-<div class="leader-name">{html.escape(top_family_name)}</div>
-<div class="leader-value">{money(top_family_sales)}</div>
-</div>""",
-        unsafe_allow_html=True,
-    )
-
-with k9:
-    st.markdown(
-        f"""<div class="leader-card" style="--accent:#D7AE58;">
-<div class="leader-label">Producto mayor venta</div>
-<div class="leader-name">{html.escape(top_product_description)}</div>
-<div class="leader-code">Código: {html.escape(top_product_code)}</div>
-<div class="leader-value">{money(top_product_sales)}</div>
-</div>""",
-        unsafe_allow_html=True,
-    )
 
 
 def render_executive_html_table(
@@ -4482,6 +4429,7 @@ st.markdown("---")
 st.markdown("## Exploración ejecutiva")
 
 (
+    tab_resumen_ejecutivo,
     tab_familia,
     tab_productos,
     tab_ventas_utilidad_familia,
@@ -4491,6 +4439,7 @@ st.markdown("## Exploración ejecutiva")
     tab_descargas,
 ) = st.tabs(
     [
+        "📊 Resumen ejecutivo",
         "🗂️ Análisis por familia",
         "📦 Análisis de productos",
         "💰 Ventas y utilidad por familia",
@@ -4503,7 +4452,77 @@ st.markdown("## Exploración ejecutiva")
 
 
 # ============================================================
-# PESTAÑA 1 — ANÁLISIS POR FAMILIA
+# PESTAÑA 1 — RESUMEN EJECUTIVO
+# ============================================================
+
+with tab_resumen_ejecutivo:
+
+    st.markdown("## Resumen ejecutivo")
+
+    # ------------------------------------------------------------
+    # FILA 1 — KPI FINANCIEROS Y OPERATIVOS
+    # ------------------------------------------------------------
+    k1, k2, k3, k4, k5 = st.columns(5, gap="small")
+
+    with k1:
+        render_exec_kpi("💵 Ventas mes", money(total_sales), "#43B9E6")
+
+    with k2:
+        render_exec_kpi("📈 Utilidad mes", money(total_profit), "#27C99B")
+
+    with k3:
+        render_exec_kpi(
+            "📦 Costo total del inventario",
+            money(total_inventory),
+            "#A984D8",
+        )
+
+    with k4:
+        render_exec_kpi("⚠️ Ventas perdidas", quantity(lost_sales, 2), "#E96573")
+
+    with k5:
+        render_exec_kpi("◉ Margen promedio", percent(average_margin), "#D7AE58")
+
+    st.markdown(
+        '<div style="height:28px;"></div>',
+        unsafe_allow_html=True,
+    )
+
+    # ------------------------------------------------------------
+    # FILA 2 — DIMENSIÓN Y LIDERAZGO
+    # ------------------------------------------------------------
+    k6, k7, k8, k9 = st.columns(4, gap="small")
+
+    with k6:
+        render_exec_kpi("▣ Productos", f"{product_count:,}", "#6F91B2")
+
+    with k7:
+        render_exec_kpi("◆ Familias", f"{family_count:,}", "#C79356")
+
+    with k8:
+        st.markdown(
+            f"""<div class="leader-card" style="--accent:#27C99B;">
+    <div class="leader-label">Familia mayor venta</div>
+    <div class="leader-name">{html.escape(top_family_name)}</div>
+    <div class="leader-value">{money(top_family_sales)}</div>
+    </div>""",
+            unsafe_allow_html=True,
+        )
+
+    with k9:
+        st.markdown(
+            f"""<div class="leader-card" style="--accent:#D7AE58;">
+    <div class="leader-label">Producto mayor venta</div>
+    <div class="leader-name">{html.escape(top_product_description)}</div>
+    <div class="leader-code">Código: {html.escape(top_product_code)}</div>
+    <div class="leader-value">{money(top_product_sales)}</div>
+    </div>""",
+            unsafe_allow_html=True,
+        )
+
+
+# ============================================================
+# PESTAÑA 2 — ANÁLISIS POR FAMILIA
 # ============================================================
 
 with tab_familia:
@@ -8671,13 +8690,13 @@ with tab_ventas_utilidad_familia:
     )
 
     chart_sales_col, chart_clear_col, chart_profit_col = st.columns(
-        [1, 0.22, 1],
-        gap="medium",
+        [1.08, 0.16, 1.08],
+        gap="small",
     )
 
     with chart_clear_col:
         st.markdown(
-            "<div style='height:205px'></div>",
+            "<div style='height:245px'></div>",
             unsafe_allow_html=True,
         )
 
@@ -8762,8 +8781,8 @@ with tab_ventas_utilidad_familia:
             .apply(
                 lambda value:
                 value
-                if len(value) <= 24
-                else value[:23].rstrip()
+                if len(value) <= 30
+                else value[:29].rstrip()
                 + "…"
             )
         )
@@ -8856,7 +8875,7 @@ with tab_ventas_utilidad_familia:
                 ],
                 textposition="outside",
                 textfont=dict(
-                    size=9,
+                    size=10,
                     color="#C8D6E4",
                     family=(
                         "Inter, Segoe UI, Arial, "
@@ -8877,13 +8896,16 @@ with tab_ventas_utilidad_familia:
         participation_fig.update_layout(
             template="plotly_dark",
             height=(
-                285
+                320
                 if selected_family_exec
                 and selected_family_exec
                 in participation_base_df[
                     "FAMILIA"
                 ].astype(str).tolist()
-                else 560
+                else max(
+                    640,
+                    180 + len(participation_df) * 17,
+                )
             ),
             paper_bgcolor="#0E1B2B",
             plot_bgcolor="#0E1B2B",
@@ -8924,10 +8946,10 @@ with tab_ventas_utilidad_familia:
                 ),
             ),
             margin=dict(
-                l=160,
-                r=105,
+                l=205,
+                r=115,
                 t=112,
-                b=48,
+                b=58,
             ),
             xaxis=dict(
                 title="Participación en ventas (%)",
@@ -8949,8 +8971,8 @@ with tab_ventas_utilidad_familia:
             yaxis=dict(
                 title="",
                 tickfont=dict(
-                    size=9,
-                    color="#C7D4E1",
+                    size=10,
+                    color="#D3DFEA",
                 ),
                 automargin=True,
                 showgrid=False,
@@ -9201,8 +9223,8 @@ with tab_ventas_utilidad_familia:
             .apply(
                 lambda value:
                 value
-                if len(value) <= 18
-                else value[:17].rstrip()
+                if len(value) <= 30
+                else value[:29].rstrip()
                 + "…"
             )
         )
@@ -9271,9 +9293,12 @@ with tab_ventas_utilidad_familia:
 
         fig.update_layout(
             height=(
-                285
+                320
                 if selected_family_for_utility
-                else 525
+                else max(
+                    640,
+                    180 + len(utility_chart) * 17,
+                )
             ),
             title=dict(
                 text=(
@@ -9302,15 +9327,15 @@ with tab_ventas_utilidad_familia:
                 ),
             ),
             margin=dict(
-                l=125,
-                r=25,
+                l=205,
+                r=35,
                 t=112,
-                b=45,
+                b=58,
             ),
             yaxis=dict(
                 tickfont=dict(
-                    size=9,
-                    color="#AFC0D1",
+                    size=10,
+                    color="#D3DFEA",
                 ),
                 automargin=True,
             ),
