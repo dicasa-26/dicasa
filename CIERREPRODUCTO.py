@@ -47,7 +47,7 @@ st.set_page_config(
 )
 
 APP_TITLE = "Dashboard de Cierre de Productos"
-DEFAULT_FILE_NAME = "CIERRE PRODUCTOS.xlsx"
+DEFAULT_FILE_NAME = "CIERRE DE PRODUCTOS.xlsm"
 
 REQUIRED_COLUMNS = [
     "NUMERO DE FAMILIA",
