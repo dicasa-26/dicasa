@@ -2945,9 +2945,9 @@ def find_default_excel() -> Optional[Path]:
 
     possible_names = [
 
-        "CIERRE PRODUCTOS.xlsx",
+        "CIERRE DE PRODUCTOS.xlsm",
 
-        "CIERRE DE PRODUCTOS.xlsx",
+        "CIERRE DE PRODUCTOS.xlsm",
 
     ]
 
